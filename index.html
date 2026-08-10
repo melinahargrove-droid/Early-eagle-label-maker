@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Early Eagle Label Maker</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#f5f8fb;color:#17324d}.wrap{max-width:520px;margin:auto;padding:20px}button,.fileButton{display:block;width:100%;box-sizing:border-box;padding:16px;margin:10px 0;border-radius:16px;border:1px solid #aac1d8;background:white;font-size:17px;color:#17324d;text-align:center}.primary{background:#28679f;color:white;border:0}.card{background:white;border:1px solid #d5e0ea;border-radius:20px;padding:16px;margin:14px 0}.hidden{display:none!important}img{max-width:100%;border-radius:16px}.label{background:white;border:4px solid #28679f;border-radius:18px;padding:12px;text-align:center;aspect-ratio:1.75/1;display:flex;flex-direction:column;justify-content:center}.label h2{margin:8px 0 3px;font-family:'Trebuchet MS','Arial Rounded MT Bold',sans-serif}.small{font-size:14px;color:#60768a}.choice{font-weight:700;text-align:left}.badge{display:inline-block;background:#e7f1fa;padding:5px 9px;border-radius:999px;font-size:13px;margin:3px}.cameraWrap{position:relative}.cameraWrap input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}.notice{background:#fff7dd;border:1px solid #ead28a;border-radius:14px;padding:12px;font-size:14px;color:#5c4a18}
+</style>
+</head>
+<body><div class="wrap">
+<section id="home">
+<p class="small">Early Eagle Academy</p><h1>Classroom Label Maker</h1><p>Snap it. Name it. Label it.</p>
+<div class="cameraWrap"><div class="fileButton primary">📷 Take a Photo</div><input id="camera" type="file" accept="image/*" capture="environment" aria-label="Take a photo with rear camera"></div>
+<div class="cameraWrap"><div class="fileButton">🖼️ Choose from Gallery</div><input id="gallery" type="file" accept="image/*" aria-label="Choose a photo from gallery"></div>
+<div id="contextNotice" class="notice hidden"></div>
+<button id="libraryBtn">🏷️ My Labels</button><button id="queueBtn">🖨️ Ready to Print <span id="count">(0)</span></button>
+</section>
+<section id="photo" class="hidden"><button class="back">← Home</button><h2>Photo</h2><div class="card"><img id="photoImg" alt="Classroom material photo"><p class="small">Next production step: connect AI identification, clean-image search, and automatic background removal.</p></div><label>Material name<input id="name" value="MAGNA-TILES" style="width:100%;box-sizing:border-box;padding:12px;margin-top:6px;border-radius:12px;border:1px solid #aac1d8;font-size:17px"></label><label>Spanish<input id="spanish" value="baldosas magnéticas" style="width:100%;box-sizing:border-box;padding:12px;margin-top:6px;border-radius:12px;border:1px solid #aac1d8;font-size:17px"></label><button id="previewBtn" class="primary">Preview Label</button></section>
+<section id="preview" class="hidden"><button class="backPhoto">← Photo</button><h2>Label Preview</h2><div class="label"><img id="labelImg" alt="" style="max-height:105px;object-fit:contain"><h2 id="labelName">MAGNA-TILES</h2><div id="labelSpanish">baldosas magnéticas</div></div><h3>Choose label set</h3><button class="choice" data-set="matching">Two Matching Labels<br><span class="small">2 × Business Card · 3.5 × 2 in</span></button><button class="choice" data-set="mixed">Two Different-Size Labels<br><span class="small">1 × Business Card + 1 × CP Basket</span></button><button class="choice" data-set="single">Single Label<br><span class="small">Choose a size</span></button><div id="singleSizes" class="hidden"><button data-single="Business Card · 3.5 × 2 in">Business Card</button><button data-single="CP Basket · 3 × 2.5 in">CP Basket</button></div></section>
+<section id="queue" class="hidden"><button class="back">← Home</button><h2>Ready to Print</h2><div id="queueList"></div><button id="printBtn" class="primary">Print / Save as PDF</button><p class="small">Production version will automatically arrange true-size labels on 8.5 × 11 sheets.</p></section>
+<section id="library" class="hidden"><button class="back">← Home</button><h2>My Labels</h2><div class="card"><strong>MAGNA-TILES</strong><br><span class="small">baldosas magnéticas</span></div><p class="small">Production version will save completed labels so they persist across devices.</p></section>
+</div>
+<script>
+const $=s=>document.querySelector(s), all=s=>document.querySelectorAll(s);let photoURL='',queue=[];
+function show(id){all('section').forEach(s=>s.classList.add('hidden'));$('#'+id).classList.remove('hidden')}
+function usePhoto(input){const f=input.files&&input.files[0];if(!f)return;if(photoURL)URL.revokeObjectURL(photoURL);photoURL=URL.createObjectURL(f);$('#photoImg').src=photoURL;show('photo');input.value=''}
+$('#camera').addEventListener('change',e=>usePhoto(e.target));
+$('#gallery').addEventListener('change',e=>usePhoto(e.target));
+all('.back').forEach(b=>b.onclick=()=>show('home'));$('.backPhoto').onclick=()=>show('photo');
+$('#previewBtn').onclick=()=>{$('#labelImg').src=photoURL;$('#labelName').textContent=$('#name').value;$('#labelSpanish').textContent=$('#spanish').value;show('preview')};
+all('[data-set]').forEach(b=>b.onclick=()=>{let t=b.dataset.set;if(t==='single'){$('#singleSizes').classList.remove('hidden');return}let sizes=t==='matching'?['Business Card · 3.5 × 2 in','Business Card · 3.5 × 2 in']:['Business Card · 3.5 × 2 in','CP Basket · 3 × 2.5 in'];add(sizes)});
+all('[data-single]').forEach(b=>b.onclick=()=>add([b.dataset.single]));
+function add(sizes){sizes.forEach(size=>queue.push({name:$('#name').value,spanish:$('#spanish').value,size,img:photoURL}));render();show('queue')}
+function render(){$('#count').textContent='('+queue.length+')';$('#queueList').innerHTML=queue.map((x,i)=>`<div class='card'><span class='badge'>${x.size}</span><br><strong>${esc(x.name)}</strong><br>${esc(x.spanish)}<br><button data-remove='${i}'>Remove</button></div>`).join('');all('[data-remove]').forEach(b=>b.onclick=()=>{queue.splice(+b.dataset.remove,1);render()})}
+function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+$('#queueBtn').onclick=()=>{render();show('queue')};$('#libraryBtn').onclick=()=>show('library');$('#printBtn').onclick=()=>window.print();
+const notice=$('#contextNotice');
+if(location.protocol==='file:'){notice.textContent='Camera access can be limited when this file is opened directly from Downloads. For reliable camera use, open the app from an HTTPS website in Chrome.';notice.classList.remove('hidden')}
+</script></body></html>
