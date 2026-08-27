@@ -144,6 +144,12 @@
       <span class="pill">AI identification</span>
       <h2 style="margin-top:10px">I think these are…</h2>
       <img id="confirmPhoto" class="preview-photo" alt="Material photo">
+      <div id="cleanupStatus" class="status hidden" aria-live="polite"></div>
+      <div id="photoChoiceRow" class="row hidden" style="margin-top:10px">
+        <button id="useCleanedBtn" class="primary">✨ Cleaned Photo</button>
+        <button id="useOriginalBtn" class="secondary">Original Photo</button>
+      </div>
+      <button id="retryCleanupBtn" class="secondary hidden" style="margin-top:10px">Retry Background Cleanup</button>
       <div style="margin-top:12px">
         <div id="foundEnglish" style="font-size:1.35rem;font-weight:800"></div>
         <div id="foundSpanish" style="font-size:1.05rem;margin-top:3px"></div>
@@ -160,6 +166,7 @@
     <button class="secondary" id="previewBack">← Back</button>
     <div class="card">
       <h2>Label Preview</h2>
+      <p id="photoModeNote" class="muted">Using cleaned photo on white background.</p>
       <div id="labelCard" class="label-preview">
         <div class="label-image-wrap"><img id="labelPhoto" alt=""></div>
         <div class="label-text">
@@ -235,13 +242,18 @@
   <p class="footer-note">The OpenAI secret key is stored in Supabase, not in this page. Photo identification uses your deployed Supabase Edge Function.</p>
 </div>
 
-<script>
+<script type="module">
+import removeBackground from "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.6/+esm";
+
 const FUNCTION_URL = "https://ctmqvbsjliinlddfolti.supabase.co/functions/v1/identify-material";
 
 const sections = ["home","capture","confirm","preview","sets","queue","library"];
 const $ = (id) => document.getElementById(id);
 let photoDataUrl = "";
+let cleanedPhotoDataUrl = "";
+let activePhotoDataUrl = "";
 let identification = null;
+let cleanupSucceeded = false;
 let selectedSet = "matching";
 let queue = [];
 let library = [];
@@ -291,6 +303,65 @@ async function handlePhoto(file){
     setStatus("I couldn't prepare that photo. Please try another picture.","error");
   }
 }
+function blobToDataUrl(blob){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+function setCleanupStatus(text, cls){
+  const el=$("cleanupStatus");
+  el.textContent=text;
+  el.className="status " + cls;
+  el.classList.remove("hidden");
+}
+async function cleanBackground(){
+  if(!photoDataUrl) return false;
+  cleanupSucceeded=false;
+  $("photoChoiceRow").classList.add("hidden");
+  $("retryCleanupBtn").classList.add("hidden");
+  setCleanupStatus("✨ Removing the background… The first time on this phone may take a little longer.","loading");
+  try{
+    const blob = await removeBackground(photoDataUrl,{
+      model:"small",
+      device:"cpu",
+      output:{format:"image/png",quality:1},
+      progress:(key,current,total)=>{
+        if(total>0){
+          const pct=Math.max(1,Math.min(100,Math.round((current/total)*100)));
+          if(String(key).startsWith("fetch:")){
+            setCleanupStatus(`✨ Loading background cleaner… ${pct}%`,"loading");
+          }else if(String(key).startsWith("compute:")){
+            setCleanupStatus(`✨ Cleaning background… ${pct}%`,"loading");
+          }
+        }
+      }
+    });
+    cleanedPhotoDataUrl = await blobToDataUrl(blob);
+    activePhotoDataUrl = cleanedPhotoDataUrl;
+    cleanupSucceeded=true;
+    $("confirmPhoto").src=activePhotoDataUrl;
+    $("photoChoiceRow").classList.remove("hidden");
+    $("useCleanedBtn").className="primary";
+    $("useOriginalBtn").className="secondary";
+    setCleanupStatus("✓ Background removed. The object will appear on clean white labels.","ok");
+    syncLabel();
+    return true;
+  }catch(err){
+    console.error("Background cleanup error:",err);
+    cleanedPhotoDataUrl="";
+    activePhotoDataUrl=photoDataUrl;
+    cleanupSucceeded=false;
+    $("confirmPhoto").src=activePhotoDataUrl;
+    $("photoChoiceRow").classList.add("hidden");
+    $("retryCleanupBtn").classList.remove("hidden");
+    setCleanupStatus("Background cleanup didn't finish, so I'm using the original photo for now. You can retry or continue.","error");
+    syncLabel();
+    return false;
+  }
+}
 async function identify(){
   if(!photoDataUrl) return;
   setStatus("✨ Identifying the classroom material…","loading");
@@ -308,8 +379,10 @@ async function identify(){
     }
     identification=data.identification;
     setStatus("✓ Identified!","ok");
+    activePhotoDataUrl=photoDataUrl;
     populateConfirm();
-    setTimeout(()=>show("confirm"),350);
+    show("confirm");
+    await cleanBackground();
   }catch(err){
     console.error("Identification error:",err);
     setStatus("Identification didn't work: " + err.message,"error");
@@ -317,7 +390,7 @@ async function identify(){
   }
 }
 function populateConfirm(){
-  $("confirmPhoto").src=photoDataUrl;
+  $("confirmPhoto").src=activePhotoDataUrl || photoDataUrl;
   $("foundEnglish").textContent=identification.english || "";
   $("foundSpanish").textContent=identification.spanish || "";
   $("foundCategory").textContent=identification.category ? "Category: "+identification.category : "";
@@ -330,7 +403,10 @@ function populateConfirm(){
 function syncLabel(){
   $("labelEnglish").textContent=$("englishInput").value || "Material";
   $("labelSpanish").textContent=$("spanishInput").value || "material";
-  $("labelPhoto").src=photoDataUrl;
+  $("labelPhoto").src=activePhotoDataUrl || photoDataUrl;
+  $("photoModeNote").textContent = (activePhotoDataUrl && activePhotoDataUrl===cleanedPhotoDataUrl)
+    ? "Using cleaned photo on a white background."
+    : "Using the original photo.";
 }
 function updateSetSummary(){
   let txt="";
@@ -343,7 +419,7 @@ function addQueue(){
   const itemBase={
     english:$("englishInput").value.trim() || "Material",
     spanish:$("spanishInput").value.trim() || "material",
-    photo:photoDataUrl
+    photo:activePhotoDataUrl || photoDataUrl
   };
   const sizes = selectedSet==="matching"
     ? ["Business Card · 3.5 × 2 in","Business Card · 3.5 × 2 in"]
@@ -418,6 +494,9 @@ $("singleSize").addEventListener("change",updateSetSummary);
 $("addToQueue").addEventListener("click",addQueue);
 $("nextMaterialBtn").addEventListener("click",()=>{
   photoDataUrl="";
+  cleanedPhotoDataUrl="";
+  activePhotoDataUrl="";
+  cleanupSucceeded=false;
   identification=null;
   $("cameraInput").value="";
   $("galleryInput").value="";
@@ -428,6 +507,23 @@ $("nextMaterialBtn").addEventListener("click",()=>{
   $("retryIdentify").classList.add("hidden");
   show("capture");
 });
+$("useCleanedBtn").addEventListener("click",()=>{
+  if(cleanedPhotoDataUrl){
+    activePhotoDataUrl=cleanedPhotoDataUrl;
+    $("confirmPhoto").src=activePhotoDataUrl;
+    $("useCleanedBtn").className="primary";
+    $("useOriginalBtn").className="secondary";
+    syncLabel();
+  }
+});
+$("useOriginalBtn").addEventListener("click",()=>{
+  activePhotoDataUrl=photoDataUrl;
+  $("confirmPhoto").src=activePhotoDataUrl;
+  $("useOriginalBtn").className="primary";
+  $("useCleanedBtn").className="secondary";
+  syncLabel();
+});
+$("retryCleanupBtn").addEventListener("click",cleanBackground);
 $("mockSheets").addEventListener("click",()=>$("sheetMsg").classList.remove("hidden"));
 updateSetSummary();
 </script>
