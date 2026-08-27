@@ -1,40 +1,420 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Early Eagle Label Maker</title>
-<style>
-body{font-family:Arial,sans-serif;margin:0;background:#f5f8fb;color:#17324d}.wrap{max-width:520px;margin:auto;padding:20px}button,.fileButton{display:block;width:100%;box-sizing:border-box;padding:16px;margin:10px 0;border-radius:16px;border:1px solid #aac1d8;background:white;font-size:17px;color:#17324d;text-align:center}.primary{background:#28679f;color:white;border:0}.card{background:white;border:1px solid #d5e0ea;border-radius:20px;padding:16px;margin:14px 0}.hidden{display:none!important}img{max-width:100%;border-radius:16px}.label{background:white;border:4px solid #28679f;border-radius:18px;padding:12px;text-align:center;aspect-ratio:1.75/1;display:flex;flex-direction:column;justify-content:center}.label h2{margin:8px 0 3px;font-family:'Trebuchet MS','Arial Rounded MT Bold',sans-serif}.small{font-size:14px;color:#60768a}.choice{font-weight:700;text-align:left}.badge{display:inline-block;background:#e7f1fa;padding:5px 9px;border-radius:999px;font-size:13px;margin:3px}.cameraWrap{position:relative}.cameraWrap input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}.notice{background:#fff7dd;border:1px solid #ead28a;border-radius:14px;padding:12px;font-size:14px;color:#5c4a18}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eff6ff">
+  <title>Early Eagle Label Maker</title>
+  <style>
+    :root{
+      --blue:#1f5f9d;
+      --blue2:#eaf4ff;
+      --ink:#17324d;
+      --muted:#66788a;
+      --line:#d9e3ec;
+      --ok:#177245;
+      --warn:#9a6700;
+      --bad:#a12622;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;background:#f7fbff;color:var(--ink);
+      font-family:"Trebuchet MS","Arial Rounded MT Bold",Arial,sans-serif;
+    }
+    .app{max-width:560px;margin:auto;padding:18px 16px 40px}
+    h1,h2,p{margin-top:0}
+    h1{font-size:1.7rem;margin-bottom:4px}
+    h2{font-size:1.25rem;margin-bottom:8px}
+    .muted{color:var(--muted);font-size:.94rem}
+    .card{background:white;border:1px solid var(--line);border-radius:22px;padding:16px;margin:14px 0}
+    button,.btn{
+      width:100%;border:0;border-radius:18px;padding:15px 16px;
+      font:inherit;font-weight:700;cursor:pointer;text-align:center;
+    }
+    .primary{background:var(--blue);color:white}
+    .secondary{background:white;color:var(--ink);border:1px solid var(--line)}
+    .soft{background:var(--blue2);color:var(--ink)}
+    .danger{color:var(--bad)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .stack{display:grid;gap:10px}
+    .hidden{display:none!important}
+    label{display:block;font-weight:700;margin:10px 0 6px}
+    input,select{
+      width:100%;padding:13px;border:1px solid #bccad6;border-radius:14px;
+      font:inherit;background:white;color:var(--ink)
+    }
+    .camera-box{
+      border:2px dashed #a9bfd2;border-radius:22px;padding:24px;text-align:center;background:white;
+    }
+    .camera-icon{font-size:3.5rem}
+    input[type=file]{
+      width:100%;padding:11px;background:white;
+    }
+    .preview-photo{
+      width:100%;max-height:300px;object-fit:contain;background:white;
+      border:1px solid var(--line);border-radius:18px;padding:6px;
+    }
+    .status{
+      padding:13px 14px;border-radius:14px;margin-top:12px;font-size:.95rem
+    }
+    .status.loading{background:#fff8dd;color:#725400}
+    .status.ok{background:#e8f7ee;color:#175a37}
+    .status.error{background:#fff0ef;color:#8b2420}
+    .label-preview{
+      aspect-ratio:1.75/1;background:#fff;border:4px solid var(--blue);
+      border-radius:20px;padding:12px;display:flex;flex-direction:column;justify-content:space-between;
+      overflow:hidden;
+    }
+    .label-preview.cp{aspect-ratio:1.2/1}
+    .label-image-wrap{
+      flex:1;display:flex;align-items:center;justify-content:center;min-height:0;
+    }
+    .label-image-wrap img{
+      max-width:100%;max-height:100%;object-fit:contain;
+    }
+    .label-text{
+      border-top:2px solid var(--blue);padding-top:6px;text-align:center;background:#fff
+    }
+    .label-en{font-size:1.2rem;font-weight:800;color:#0e4c88}
+    .label-es{font-size:1rem;font-weight:700;color:#111;margin-top:2px}
+    .pill{
+      display:inline-block;padding:6px 9px;border-radius:999px;background:var(--blue2);
+      font-size:.82rem;margin:2px 3px 2px 0
+    }
+    .choice{
+      border:2px solid var(--line);border-radius:18px;padding:14px;margin:10px 0;
+      background:white;cursor:pointer
+    }
+    .choice.selected{border-color:var(--blue);background:var(--blue2)}
+    .choice strong{display:block;margin-bottom:3px}
+    .queue-item{
+      display:flex;justify-content:space-between;gap:10px;align-items:center;
+      border:1px solid var(--line);border-radius:15px;padding:11px;margin:8px 0;background:white
+    }
+    .tiny{font-size:.8rem;color:var(--muted)}
+    .topnav{display:flex;gap:8px;margin-bottom:10px}
+    .topnav button{padding:10px;font-weight:600}
+    .footer-note{font-size:.78rem;color:var(--muted);margin-top:20px}
+    @media (max-width:380px){.row{grid-template-columns:1fr}.label-en{font-size:1.05rem}.label-es{font-size:.9rem}}
+  </style>
 </head>
-<body><div class="wrap">
-<section id="home">
-<p class="small">Early Eagle Academy</p><h1>Classroom Label Maker</h1><p>Snap it. Name it. Label it.</p>
-<div class="cameraWrap"><div class="fileButton primary">📷 Take a Photo</div><input id="camera" type="file" accept="image/*" capture="environment" aria-label="Take a photo with rear camera"></div>
-<div class="cameraWrap"><div class="fileButton">🖼️ Choose from Gallery</div><input id="gallery" type="file" accept="image/*" aria-label="Choose a photo from gallery"></div>
-<div id="contextNotice" class="notice hidden"></div>
-<button id="libraryBtn">🏷️ My Labels</button><button id="queueBtn">🖨️ Ready to Print <span id="count">(0)</span></button>
-</section>
-<section id="photo" class="hidden"><button class="back">← Home</button><h2>Photo</h2><div class="card"><img id="photoImg" alt="Classroom material photo"><p class="small">Next production step: connect AI identification, clean-image search, and automatic background removal.</p></div><label>Material name<input id="name" value="MAGNA-TILES" style="width:100%;box-sizing:border-box;padding:12px;margin-top:6px;border-radius:12px;border:1px solid #aac1d8;font-size:17px"></label><label>Spanish<input id="spanish" value="baldosas magnéticas" style="width:100%;box-sizing:border-box;padding:12px;margin-top:6px;border-radius:12px;border:1px solid #aac1d8;font-size:17px"></label><button id="previewBtn" class="primary">Preview Label</button></section>
-<section id="preview" class="hidden"><button class="backPhoto">← Photo</button><h2>Label Preview</h2><div class="label"><img id="labelImg" alt="" style="max-height:105px;object-fit:contain"><h2 id="labelName">MAGNA-TILES</h2><div id="labelSpanish">baldosas magnéticas</div></div><h3>Choose label set</h3><button class="choice" data-set="matching">Two Matching Labels<br><span class="small">2 × Business Card · 3.5 × 2 in</span></button><button class="choice" data-set="mixed">Two Different-Size Labels<br><span class="small">1 × Business Card + 1 × CP Basket</span></button><button class="choice" data-set="single">Single Label<br><span class="small">Choose a size</span></button><div id="singleSizes" class="hidden"><button data-single="Business Card · 3.5 × 2 in">Business Card</button><button data-single="CP Basket · 3 × 2.5 in">CP Basket</button></div></section>
-<section id="queue" class="hidden"><button class="back">← Home</button><h2>Ready to Print</h2><div id="queueList"></div><button id="printBtn" class="primary">Print / Save as PDF</button><p class="small">Production version will automatically arrange true-size labels on 8.5 × 11 sheets.</p></section>
-<section id="library" class="hidden"><button class="back">← Home</button><h2>My Labels</h2><div class="card"><strong>MAGNA-TILES</strong><br><span class="small">baldosas magnéticas</span></div><p class="small">Production version will save completed labels so they persist across devices.</p></section>
+<body>
+<div class="app">
+  <section id="home">
+    <p class="muted">Early Eagle Academy</p>
+    <h1>Classroom Label Maker</h1>
+    <p class="muted">Take a photo. Let AI identify it. Make matching bilingual labels.</p>
+
+    <div class="stack">
+      <button class="primary" id="startBtn">📷 Make a Label</button>
+      <div class="row">
+        <button class="secondary" id="queueBtn">🖨️ Ready to Print <span id="queueCount">(0)</span></button>
+        <button class="secondary" id="libraryBtn">🏷️ My Labels</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <strong>Saved label sizes</strong><br>
+      <span class="pill">Business Card · 3.5 × 2 in</span>
+      <span class="pill">CP Basket · 3 × 2.5 in</span>
+    </div>
+  </section>
+
+  <section id="capture" class="hidden">
+    <button class="secondary" id="captureBack">← Home</button>
+    <div class="card">
+      <h2>Photograph the material</h2>
+      <p class="muted">Try to fill the picture with the toy/material you want labeled.</p>
+      <div class="camera-box">
+        <div class="camera-icon">📷</div>
+        <label for="cameraInput">Take a photo</label>
+        <input id="cameraInput" type="file" accept="image/*" capture="environment">
+        <label for="galleryInput">Or choose from gallery</label>
+        <input id="galleryInput" type="file" accept="image/*">
+      </div>
+      <img id="capturedPreview" class="preview-photo hidden" alt="Photo selected for identification">
+      <div id="identifyStatus" class="status hidden" aria-live="polite"></div>
+      <button id="retryIdentify" class="secondary hidden">Try Identification Again</button>
+    </div>
+  </section>
+
+  <section id="confirm" class="hidden">
+    <button class="secondary" id="confirmBack">← Retake Photo</button>
+    <div class="card">
+      <span class="pill">AI identification</span>
+      <h2 style="margin-top:10px">I think these are…</h2>
+      <img id="confirmPhoto" class="preview-photo" alt="Material photo">
+      <div style="margin-top:12px">
+        <div id="foundEnglish" style="font-size:1.35rem;font-weight:800"></div>
+        <div id="foundSpanish" style="font-size:1.05rem;margin-top:3px"></div>
+        <p class="muted" id="foundCategory" style="margin:8px 0 0"></p>
+        <p class="muted" id="foundConfidence"></p>
+        <p class="tiny" id="foundNotes"></p>
+      </div>
+      <button id="thatsRight" class="primary">✓ That's Right</button>
+      <button id="editIdentification" class="secondary" style="margin-top:8px">✏️ Edit Wording</button>
+    </div>
+  </section>
+
+  <section id="preview" class="hidden">
+    <button class="secondary" id="previewBack">← Back</button>
+    <div class="card">
+      <h2>Label Preview</h2>
+      <div id="labelCard" class="label-preview">
+        <div class="label-image-wrap"><img id="labelPhoto" alt=""></div>
+        <div class="label-text">
+          <div id="labelEnglish" class="label-en"></div>
+          <div id="labelSpanish" class="label-es"></div>
+        </div>
+      </div>
+
+      <label for="englishInput">English</label>
+      <input id="englishInput" autocomplete="off">
+      <label for="spanishInput">Spanish</label>
+      <input id="spanishInput" autocomplete="off">
+
+      <button id="chooseSetBtn" class="primary" style="margin-top:14px">Choose Label Set</button>
+    </div>
+  </section>
+
+  <section id="sets" class="hidden">
+    <button class="secondary" id="setsBack">← Label Preview</button>
+    <div class="card">
+      <h2>Which label set?</h2>
+      <p class="muted">Your two normal setups are one tap.</p>
+
+      <div class="choice selected" data-set="matching">
+        <strong>Two Matching Labels</strong>
+        <span>2 × Business Card (3.5 × 2 in)</span>
+      </div>
+
+      <div class="choice" data-set="different">
+        <strong>Two Different-Size Labels</strong>
+        <span>1 × Business Card + 1 × CP Basket</span>
+      </div>
+
+      <div class="choice" data-set="single">
+        <strong>Single Label</strong>
+        <span>Choose the size below</span>
+      </div>
+
+      <div id="singleSizeWrap" class="hidden">
+        <label for="singleSize">Single label size</label>
+        <select id="singleSize">
+          <option value="Business Card · 3.5 × 2 in">Business Card · 3.5 × 2 in</option>
+          <option value="CP Basket · 3 × 2.5 in">CP Basket · 3 × 2.5 in</option>
+        </select>
+      </div>
+
+      <div class="card soft" id="setSummary" style="margin-bottom:10px"></div>
+      <button id="addToQueue" class="primary">✓ Add to Print Queue</button>
+    </div>
+  </section>
+
+  <section id="queue" class="hidden">
+    <button class="secondary" id="queueBack">← Home</button>
+    <div class="card">
+      <h2>Ready to Print</h2>
+      <p class="muted" id="queueSummary">Nothing queued yet.</p>
+      <div id="queueItems"></div>
+      <button id="mockSheets" class="primary hidden">Create 8.5 × 11 Print Sheets</button>
+      <div id="sheetMsg" class="status ok hidden">Print-sheet generation is the next feature to wire. Label sizes in the queue are already stored at true size.</div>
+    </div>
+  </section>
+
+  <section id="library" class="hidden">
+    <button class="secondary" id="libraryBack">← Home</button>
+    <div class="card">
+      <h2>My Labels</h2>
+      <p class="muted">This prototype keeps the current-session library in memory. Supabase persistence comes next.</p>
+      <div id="libraryItems"><p class="muted">No approved labels saved yet.</p></div>
+    </div>
+  </section>
+
+  <p class="footer-note">The OpenAI secret key is stored in Supabase, not in this page. Photo identification uses your deployed Supabase Edge Function.</p>
 </div>
+
 <script>
-const $=s=>document.querySelector(s), all=s=>document.querySelectorAll(s);let photoURL='',queue=[];
-function show(id){all('section').forEach(s=>s.classList.add('hidden'));$('#'+id).classList.remove('hidden')}
-function usePhoto(input){const f=input.files&&input.files[0];if(!f)return;if(photoURL)URL.revokeObjectURL(photoURL);photoURL=URL.createObjectURL(f);$('#photoImg').src=photoURL;show('photo');input.value=''}
-$('#camera').addEventListener('change',e=>usePhoto(e.target));
-$('#gallery').addEventListener('change',e=>usePhoto(e.target));
-all('.back').forEach(b=>b.onclick=()=>show('home'));$('.backPhoto').onclick=()=>show('photo');
-$('#previewBtn').onclick=()=>{$('#labelImg').src=photoURL;$('#labelName').textContent=$('#name').value;$('#labelSpanish').textContent=$('#spanish').value;show('preview')};
-all('[data-set]').forEach(b=>b.onclick=()=>{let t=b.dataset.set;if(t==='single'){$('#singleSizes').classList.remove('hidden');return}let sizes=t==='matching'?['Business Card · 3.5 × 2 in','Business Card · 3.5 × 2 in']:['Business Card · 3.5 × 2 in','CP Basket · 3 × 2.5 in'];add(sizes)});
-all('[data-single]').forEach(b=>b.onclick=()=>add([b.dataset.single]));
-function add(sizes){sizes.forEach(size=>queue.push({name:$('#name').value,spanish:$('#spanish').value,size,img:photoURL}));render();show('queue')}
-function render(){$('#count').textContent='('+queue.length+')';$('#queueList').innerHTML=queue.map((x,i)=>`<div class='card'><span class='badge'>${x.size}</span><br><strong>${esc(x.name)}</strong><br>${esc(x.spanish)}<br><button data-remove='${i}'>Remove</button></div>`).join('');all('[data-remove]').forEach(b=>b.onclick=()=>{queue.splice(+b.dataset.remove,1);render()})}
-function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-$('#queueBtn').onclick=()=>{render();show('queue')};$('#libraryBtn').onclick=()=>show('library');$('#printBtn').onclick=()=>window.print();
-const notice=$('#contextNotice');
-if(location.protocol==='file:'){notice.textContent='Camera access can be limited when this file is opened directly from Downloads. For reliable camera use, open the app from an HTTPS website in Chrome.';notice.classList.remove('hidden')}
-</script></body></html>
+const FUNCTION_URL = "https://ctmqvbsjliinlddfolti.supabase.co/functions/v1/identify-material";
+
+const sections = ["home","capture","confirm","preview","sets","queue","library"];
+const $ = (id) => document.getElementById(id);
+let photoDataUrl = "";
+let identification = null;
+let selectedSet = "matching";
+let queue = [];
+let library = [];
+
+function show(id){
+  sections.forEach(s => $(s).classList.toggle("hidden", s !== id));
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+function dataUrlFromFile(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+async function compressImage(file){
+  const raw = await dataUrlFromFile(file);
+  const img = new Image();
+  await new Promise((resolve,reject)=>{ img.onload=resolve; img.onerror=reject; img.src=raw; });
+  const maxSide = 1400;
+  let w = img.naturalWidth, h = img.naturalHeight;
+  const scale = Math.min(1, maxSide / Math.max(w,h));
+  w = Math.max(1, Math.round(w*scale)); h = Math.max(1, Math.round(h*scale));
+  const canvas = document.createElement("canvas");
+  canvas.width=w; canvas.height=h;
+  canvas.getContext("2d").drawImage(img,0,0,w,h);
+  return canvas.toDataURL("image/jpeg",0.82);
+}
+function setStatus(text, cls){
+  const el=$("identifyStatus");
+  el.textContent=text;
+  el.className="status " + cls;
+  el.classList.remove("hidden");
+}
+async function handlePhoto(file){
+  if(!file) return;
+  try{
+    $("retryIdentify").classList.add("hidden");
+    setStatus("Preparing photo…","loading");
+    photoDataUrl = await compressImage(file);
+    $("capturedPreview").src=photoDataUrl;
+    $("capturedPreview").classList.remove("hidden");
+    await identify();
+  }catch(err){
+    console.error(err);
+    setStatus("I couldn't prepare that photo. Please try another picture.","error");
+  }
+}
+async function identify(){
+  if(!photoDataUrl) return;
+  setStatus("✨ Identifying the classroom material…","loading");
+  $("retryIdentify").classList.add("hidden");
+  try{
+    const response = await fetch(FUNCTION_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({imageDataUrl:photoDataUrl})
+    });
+    let data;
+    try{ data=await response.json(); }catch{ data={}; }
+    if(!response.ok || !data.success || !data.identification){
+      throw new Error(data.details || data.error || `Request failed (${response.status})`);
+    }
+    identification=data.identification;
+    setStatus("✓ Identified!","ok");
+    populateConfirm();
+    setTimeout(()=>show("confirm"),350);
+  }catch(err){
+    console.error("Identification error:",err);
+    setStatus("Identification didn't work: " + err.message,"error");
+    $("retryIdentify").classList.remove("hidden");
+  }
+}
+function populateConfirm(){
+  $("confirmPhoto").src=photoDataUrl;
+  $("foundEnglish").textContent=identification.english || "";
+  $("foundSpanish").textContent=identification.spanish || "";
+  $("foundCategory").textContent=identification.category ? "Category: "+identification.category : "";
+  $("foundConfidence").textContent=identification.confidence ? "Confidence: "+identification.confidence : "";
+  $("foundNotes").textContent=identification.notes || "";
+  $("englishInput").value=identification.english || "";
+  $("spanishInput").value=identification.spanish || "";
+  syncLabel();
+}
+function syncLabel(){
+  $("labelEnglish").textContent=$("englishInput").value || "Material";
+  $("labelSpanish").textContent=$("spanishInput").value || "material";
+  $("labelPhoto").src=photoDataUrl;
+}
+function updateSetSummary(){
+  let txt="";
+  if(selectedSet==="matching") txt="<strong>Creating 2 labels</strong><br>2 × Business Card — 3.5 × 2 in";
+  if(selectedSet==="different") txt="<strong>Creating 2 labels</strong><br>1 × Business Card — 3.5 × 2 in<br>1 × CP Basket — 3 × 2.5 in";
+  if(selectedSet==="single") txt="<strong>Creating 1 label</strong><br>"+$("singleSize").value;
+  $("setSummary").innerHTML=txt;
+}
+function addQueue(){
+  const itemBase={
+    english:$("englishInput").value.trim() || "Material",
+    spanish:$("spanishInput").value.trim() || "material",
+    photo:photoDataUrl
+  };
+  const sizes = selectedSet==="matching"
+    ? ["Business Card · 3.5 × 2 in","Business Card · 3.5 × 2 in"]
+    : selectedSet==="different"
+      ? ["Business Card · 3.5 × 2 in","CP Basket · 3 × 2.5 in"]
+      : [$("singleSize").value];
+  sizes.forEach(size=>queue.push({...itemBase,size}));
+  if(!library.some(x=>x.english===itemBase.english && x.spanish===itemBase.spanish)){
+    library.push(itemBase);
+  }
+  refreshQueue();
+  refreshLibrary();
+  show("queue");
+}
+function refreshQueue(){
+  $("queueCount").textContent=`(${queue.length})`;
+  $("queueSummary").textContent=queue.length ? `${queue.length} label${queue.length===1?"":"s"} waiting.` : "Nothing queued yet.";
+  $("mockSheets").classList.toggle("hidden",queue.length===0);
+  $("queueItems").innerHTML="";
+  queue.forEach((item,i)=>{
+    const d=document.createElement("div");
+    d.className="queue-item";
+    const left=document.createElement("div");
+    const name=document.createElement("strong"); name.textContent=item.english;
+    const size=document.createElement("div"); size.className="tiny"; size.textContent=item.size;
+    left.append(name,size);
+    const b=document.createElement("button"); b.className="secondary danger"; b.style.width="auto"; b.style.padding="8px 10px"; b.textContent="Remove";
+    b.addEventListener("click",()=>{queue.splice(i,1);refreshQueue();});
+    d.append(left,b);
+    $("queueItems").append(d);
+  });
+}
+function refreshLibrary(){
+  $("libraryItems").innerHTML="";
+  if(!library.length){$("libraryItems").innerHTML='<p class="muted">No approved labels saved yet.</p>';return;}
+  library.forEach(item=>{
+    const d=document.createElement("div"); d.className="queue-item";
+    const left=document.createElement("div");
+    const e=document.createElement("strong"); e.textContent=item.english;
+    const s=document.createElement("div"); s.className="tiny"; s.textContent=item.spanish;
+    left.append(e,s); d.append(left); $("libraryItems").append(d);
+  });
+}
+
+$("startBtn").addEventListener("click",()=>show("capture"));
+$("queueBtn").addEventListener("click",()=>{refreshQueue();show("queue")});
+$("libraryBtn").addEventListener("click",()=>{refreshLibrary();show("library")});
+$("captureBack").addEventListener("click",()=>show("home"));
+$("confirmBack").addEventListener("click",()=>show("capture"));
+$("previewBack").addEventListener("click",()=>show("confirm"));
+$("setsBack").addEventListener("click",()=>show("preview"));
+$("queueBack").addEventListener("click",()=>show("home"));
+$("libraryBack").addEventListener("click",()=>show("home"));
+$("cameraInput").addEventListener("change",e=>handlePhoto(e.target.files?.[0]));
+$("galleryInput").addEventListener("change",e=>handlePhoto(e.target.files?.[0]));
+$("retryIdentify").addEventListener("click",identify);
+$("thatsRight").addEventListener("click",()=>{populateConfirm();show("preview")});
+$("editIdentification").addEventListener("click",()=>{populateConfirm();show("preview");$("englishInput").focus()});
+$("englishInput").addEventListener("input",syncLabel);
+$("spanishInput").addEventListener("input",syncLabel);
+$("chooseSetBtn").addEventListener("click",()=>{updateSetSummary();show("sets")});
+document.querySelectorAll(".choice").forEach(c=>c.addEventListener("click",()=>{
+  document.querySelectorAll(".choice").forEach(x=>x.classList.remove("selected"));
+  c.classList.add("selected");
+  selectedSet=c.dataset.set;
+  $("singleSizeWrap").classList.toggle("hidden",selectedSet!=="single");
+  updateSetSummary();
+}));
+$("singleSize").addEventListener("change",updateSetSummary);
+$("addToQueue").addEventListener("click",addQueue);
+$("mockSheets").addEventListener("click",()=>$("sheetMsg").classList.remove("hidden"));
+updateSetSummary();
+</script>
+</body>
+</html>
