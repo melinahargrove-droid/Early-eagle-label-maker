@@ -217,7 +217,8 @@
       <h2>Ready to Print</h2>
       <p class="muted" id="queueSummary">Nothing queued yet.</p>
       <div id="queueItems"></div>
-      <button id="mockSheets" class="primary hidden">Create 8.5 × 11 Print Sheets</button>
+      <button id="nextMaterialBtn" class="primary hidden">📷 Photograph Next Material</button>
+      <button id="mockSheets" class="secondary hidden" style="margin-top:8px">Create 8.5 × 11 Print Sheets</button>
       <div id="sheetMsg" class="status ok hidden">Print-sheet generation is the next feature to wire. Label sizes in the queue are already stored at true size.</div>
     </div>
   </section>
@@ -361,14 +362,16 @@ function refreshQueue(){
   $("queueCount").textContent=`(${queue.length})`;
   $("queueSummary").textContent=queue.length ? `${queue.length} label${queue.length===1?"":"s"} waiting.` : "Nothing queued yet.";
   $("mockSheets").classList.toggle("hidden",queue.length===0);
+  $("nextMaterialBtn").classList.toggle("hidden",queue.length===0);
   $("queueItems").innerHTML="";
   queue.forEach((item,i)=>{
     const d=document.createElement("div");
     d.className="queue-item";
     const left=document.createElement("div");
     const name=document.createElement("strong"); name.textContent=item.english;
-    const size=document.createElement("div"); size.className="tiny"; size.textContent=item.size;
-    left.append(name,size);
+    const spanish=document.createElement("div"); spanish.style.marginTop="2px"; spanish.textContent=item.spanish;
+    const size=document.createElement("div"); size.className="tiny"; size.style.marginTop="3px"; size.textContent=item.size;
+    left.append(name,spanish,size);
     const b=document.createElement("button"); b.className="secondary danger"; b.style.width="auto"; b.style.padding="8px 10px"; b.textContent="Remove";
     b.addEventListener("click",()=>{queue.splice(i,1);refreshQueue();});
     d.append(left,b);
@@ -413,6 +416,18 @@ document.querySelectorAll(".choice").forEach(c=>c.addEventListener("click",()=>{
 }));
 $("singleSize").addEventListener("change",updateSetSummary);
 $("addToQueue").addEventListener("click",addQueue);
+$("nextMaterialBtn").addEventListener("click",()=>{
+  photoDataUrl="";
+  identification=null;
+  $("cameraInput").value="";
+  $("galleryInput").value="";
+  $("capturedPreview").src="";
+  $("capturedPreview").classList.add("hidden");
+  $("identifyStatus").className="status hidden";
+  $("identifyStatus").textContent="";
+  $("retryIdentify").classList.add("hidden");
+  show("capture");
+});
 $("mockSheets").addEventListener("click",()=>$("sheetMsg").classList.remove("hidden"));
 updateSetSummary();
 </script>
