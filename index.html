@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eff6ff">
   <title>Early Eagle Label Maker</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="application-name" content="Early Eagle Label Maker">
+  <meta name="apple-mobile-web-app-title" content="Early Eagle Labels">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <style>
     :root{
       --blue:#1f5f9d;
@@ -110,6 +119,7 @@
 
     <div class="stack">
       <button class="primary" id="startBtn">📷 Make a Label</button>
+      <button class="secondary hidden" id="installAppBtn">📲 Install on Home Screen</button>
       <div class="row">
         <button class="secondary" id="queueBtn">🖨️ Ready to Print <span id="queueCount">(0)</span></button>
         <button class="secondary" id="libraryBtn">🏷️ My Labels</button>
@@ -148,8 +158,16 @@
       <h2 style="margin-top:10px">I think these are…</h2>
       <img id="confirmPhoto" class="preview-photo" alt="Material photo">
       <div id="cleanupStatus" class="status hidden" aria-live="polite"></div>
+      <div id="cleanupStrengthWrap" class="hidden" style="margin-top:10px">
+        <div class="tiny" style="margin-bottom:6px">Cleanup strength</div>
+        <div class="row">
+          <button id="normalCleanupBtn" class="primary">Normal</button>
+          <button id="strongCleanupBtn" class="secondary">Strong</button>
+        </div>
+        <p class="tiny" style="margin:7px 0 0">Use Strong when pale tabletop, carpet, or other background scraps remain around the object.</p>
+      </div>
       <div id="photoChoiceRow" class="row hidden" style="margin-top:10px">
-        <button id="useCleanedBtn" class="primary">✨ Cleaned Photo</button>
+        <button id="useCleanedBtn" class="primary">✓ Use Cleanup</button>
         <button id="useOriginalBtn" class="secondary">Original Photo</button>
       </div>
       <button id="retryCleanupBtn" class="secondary hidden" style="margin-top:10px">Retry Background Cleanup</button>
@@ -390,8 +408,10 @@ async function getBackgroundRemover(){
 const sections = ["home","capture","confirm","preview","sets","queue","library"];
 const $ = (id) => document.getElementById(id);
 let photoDataUrl = "";
+let rawRemovedPhotoDataUrl = "";
 let cleanedPhotoDataUrl = "";
 let activePhotoDataUrl = "";
+let cleanupMode = "normal";
 let identification = null;
 let cleanupSucceeded = false;
 let selectedSet = "matching";
@@ -454,6 +474,120 @@ function blobToDataUrl(blob){
     reader.readAsDataURL(blob);
   });
 }
+async function refineRemovedBackground(dataUrl, mode="normal"){
+  const img = new Image();
+  await new Promise((resolve,reject)=>{
+    img.onload=resolve;
+    img.onerror=reject;
+    img.src=dataUrl;
+  });
+
+  const canvas=document.createElement("canvas");
+  canvas.width=img.naturalWidth;
+  canvas.height=img.naturalHeight;
+  const ctx=canvas.getContext("2d",{willReadFrequently:true});
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0);
+
+  const imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const d=imageData.data;
+
+  // Normal removes faint mask debris.
+  // Strong removes more low-confidence leftovers around pale objects/backgrounds.
+  const alphaCut = mode==="strong" ? 155 : 70;
+  const featherEnd = mode==="strong" ? 225 : 150;
+  const paleThreshold = mode==="strong" ? 236 : 248;
+
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i], g=d[i+1], b=d[i+2], a=d[i+3];
+
+    if(a<=alphaCut){
+      d[i+3]=0;
+      continue;
+    }
+
+    if(a<featherEnd){
+      d[i+3]=Math.max(0,Math.min(255,
+        Math.round(255*(a-alphaCut)/(featherEnd-alphaCut))
+      ));
+    }
+
+    // Remove nearly-neutral pale fragments left by the segmentation mask.
+    const maxC=Math.max(r,g,b), minC=Math.min(r,g,b);
+    if(r>=paleThreshold && g>=paleThreshold && b>=paleThreshold && (maxC-minC)<14){
+      d[i+3]=0;
+    }
+  }
+
+  ctx.putImageData(imageData,0,0);
+
+  // Find remaining object bounds for a tighter crop.
+  const refined=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+  let minX=canvas.width, minY=canvas.height, maxX=-1, maxY=-1;
+
+  for(let y=0;y<canvas.height;y++){
+    for(let x=0;x<canvas.width;x++){
+      const a=refined[(y*canvas.width+x)*4+3];
+      if(a>20){
+        minX=Math.min(minX,x);
+        minY=Math.min(minY,y);
+        maxX=Math.max(maxX,x);
+        maxY=Math.max(maxY,y);
+      }
+    }
+  }
+
+  if(maxX<0) return dataUrl;
+
+  const objectW=maxX-minX+1;
+  const objectH=maxY-minY+1;
+  const pad=Math.round(Math.max(objectW,objectH)*0.08);
+
+  minX=Math.max(0,minX-pad);
+  minY=Math.max(0,minY-pad);
+  maxX=Math.min(canvas.width-1,maxX+pad);
+  maxY=Math.min(canvas.height-1,maxY+pad);
+
+  const w=maxX-minX+1;
+  const h=maxY-minY+1;
+
+  const out=document.createElement("canvas");
+  out.width=w;
+  out.height=h;
+  const octx=out.getContext("2d");
+
+  // Put the approved result on a true solid-white label background.
+  octx.fillStyle="#ffffff";
+  octx.fillRect(0,0,w,h);
+  octx.drawImage(canvas,minX,minY,w,h,0,0,w,h);
+
+  return out.toDataURL("image/png");
+}
+
+async function applyCleanupMode(mode){
+  if(!rawRemovedPhotoDataUrl) return;
+
+  cleanupMode=mode;
+  setCleanupStatus(`Refining ${mode} cleanup…`,"loading");
+
+  try{
+    cleanedPhotoDataUrl=await refineRemovedBackground(rawRemovedPhotoDataUrl,mode);
+    activePhotoDataUrl=cleanedPhotoDataUrl;
+    $("confirmPhoto").src=cleanedPhotoDataUrl;
+
+    $("normalCleanupBtn").className=mode==="normal" ? "primary" : "secondary";
+    $("strongCleanupBtn").className=mode==="strong" ? "primary" : "secondary";
+    $("useCleanedBtn").className="primary";
+    $("useOriginalBtn").className="secondary";
+
+    syncLabel();
+    setCleanupStatus("Background cleanup preview — choose Normal or Strong, then approve the version you like.","ok");
+  }catch(err){
+    console.error("Cleanup refinement error:",err);
+    setCleanupStatus("I couldn't refine that cleanup. You can still use the original photo.","error");
+  }
+}
+
 function setCleanupStatus(text, cls){
   const el=$("cleanupStatus");
   el.textContent=text;
@@ -486,21 +620,20 @@ async function cleanBackground(){
         }
       }
     });
-    cleanedPhotoDataUrl = await blobToDataUrl(blob);
-    activePhotoDataUrl = cleanedPhotoDataUrl;
+    rawRemovedPhotoDataUrl = await blobToDataUrl(blob);
     cleanupSucceeded=true;
-    $("confirmPhoto").src=activePhotoDataUrl;
+    $("cleanupStrengthWrap").classList.remove("hidden");
     $("photoChoiceRow").classList.remove("hidden");
-    $("useCleanedBtn").className="primary";
-    $("useOriginalBtn").className="secondary";
-    setCleanupStatus("✓ Background removed. The object will appear on clean white labels.","ok");
-    syncLabel();
+    await applyCleanupMode("normal");
     return true;
   }catch(err){
     console.error("Background cleanup error:",err);
+    rawRemovedPhotoDataUrl="";
     cleanedPhotoDataUrl="";
     activePhotoDataUrl=photoDataUrl;
+    cleanupMode="normal";
     cleanupSucceeded=false;
+    $("cleanupStrengthWrap").classList.add("hidden");
     $("confirmPhoto").src=activePhotoDataUrl;
     $("photoChoiceRow").classList.add("hidden");
     $("retryCleanupBtn").classList.remove("hidden");
@@ -604,7 +737,7 @@ function syncLabel(){
   $("labelSpanish").textContent=$("spanishInput").value || "material";
   $("labelPhoto").src=activePhotoDataUrl || photoDataUrl;
   $("photoModeNote").textContent = (activePhotoDataUrl && activePhotoDataUrl===cleanedPhotoDataUrl)
-    ? "Using cleaned photo on a white background."
+    ? `Using ${cleanupMode} cleanup on a true white background.`
     : "Using the original photo.";
 }
 function updateSetSummary(){
@@ -764,9 +897,12 @@ $("singleSize").addEventListener("change",updateSetSummary);
 $("addToQueue").addEventListener("click",addQueue);
 $("nextMaterialBtn").addEventListener("click",()=>{
   photoDataUrl="";
+  rawRemovedPhotoDataUrl="";
   cleanedPhotoDataUrl="";
   activePhotoDataUrl="";
+  cleanupMode="normal";
   cleanupSucceeded=false;
+  $("cleanupStrengthWrap").classList.add("hidden");
   identification=null;
   clearTimeout(translationTimer);
   translationRequestId++;
@@ -781,6 +917,8 @@ $("nextMaterialBtn").addEventListener("click",()=>{
   $("retryIdentify").classList.add("hidden");
   show("capture");
 });
+$("normalCleanupBtn").addEventListener("click",()=>applyCleanupMode("normal"));
+$("strongCleanupBtn").addEventListener("click",()=>applyCleanupMode("strong"));
 $("useCleanedBtn").addEventListener("click",()=>{
   if(cleanedPhotoDataUrl){
     activePhotoDataUrl=cleanedPhotoDataUrl;
@@ -801,6 +939,32 @@ $("retryCleanupBtn").addEventListener("click",cleanBackground);
 $("mockSheets").addEventListener("click",()=>$("sheetMsg").classList.remove("hidden"));
 updateSetSummary();
 initCloud();
+
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt",(event)=>{
+  event.preventDefault();
+  deferredInstallPrompt=event;
+  $("installAppBtn").classList.remove("hidden");
+});
+$("installAppBtn").addEventListener("click",async()=>{
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    try{ await deferredInstallPrompt.userChoice; }catch{}
+    deferredInstallPrompt=null;
+    $("installAppBtn").classList.add("hidden");
+  }else{
+    alert("On Android Chrome: open the browser menu and choose Add to Home screen or Install app.");
+  }
+});
+window.addEventListener("appinstalled",()=>{
+  $("installAppBtn").classList.add("hidden");
+  deferredInstallPrompt=null;
+});
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("./service-worker.js").catch(err=>console.warn("Service worker registration failed:",err));
+  });
+}
 </script>
 </body>
 </html>
