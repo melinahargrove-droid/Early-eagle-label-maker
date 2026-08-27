@@ -1,7 +1,6 @@
 {
   "name": "Early Eagle Label Maker",
   "short_name": "Eagle Labels",
-  "description": "AI-powered bilingual classroom label maker for Early Eagle Academy.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
