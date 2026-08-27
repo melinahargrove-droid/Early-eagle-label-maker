@@ -242,10 +242,21 @@
   <p class="footer-note">The OpenAI secret key is stored in Supabase, not in this page. Photo identification uses your deployed Supabase Edge Function.</p>
 </div>
 
-<script type="module">
-import removeBackground from "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.6/+esm";
-
+<script>
 const FUNCTION_URL = "https://ctmqvbsjliinlddfolti.supabase.co/functions/v1/identify-material";
+let backgroundRemover = null;
+
+async function getBackgroundRemover(){
+  if(backgroundRemover) return backgroundRemover;
+  try{
+    const mod = await import("https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.6/+esm");
+    backgroundRemover = mod.default || mod.removeBackground || mod;
+    return backgroundRemover;
+  }catch(err){
+    console.error("Could not load background-removal library:", err);
+    return null;
+  }
+}
 
 const sections = ["home","capture","confirm","preview","sets","queue","library"];
 const $ = (id) => document.getElementById(id);
@@ -324,6 +335,10 @@ async function cleanBackground(){
   $("retryCleanupBtn").classList.add("hidden");
   setCleanupStatus("✨ Removing the background… The first time on this phone may take a little longer.","loading");
   try{
+    const removeBackground = await getBackgroundRemover();
+    if(!removeBackground){
+      throw new Error("Background-removal library could not load on this device.");
+    }
     const blob = await removeBackground(photoDataUrl,{
       model:"small",
       device:"cpu",
@@ -357,7 +372,7 @@ async function cleanBackground(){
     $("confirmPhoto").src=activePhotoDataUrl;
     $("photoChoiceRow").classList.add("hidden");
     $("retryCleanupBtn").classList.remove("hidden");
-    setCleanupStatus("Background cleanup didn't finish, so I'm using the original photo for now. You can retry or continue.","error");
+    setCleanupStatus("Background cleanup isn't available right now, so I'm using the original photo. Everything else still works normally.","error");
     syncLabel();
     return false;
   }
