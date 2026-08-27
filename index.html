@@ -91,6 +91,8 @@
       display:flex;justify-content:space-between;gap:10px;align-items:center;
       border:1px solid var(--line);border-radius:15px;padding:11px;margin:8px 0;background:white
     }
+    .queue-actions{display:grid;gap:6px;min-width:112px}
+    .queue-actions button{padding:8px 10px;font-size:.85rem}
     .tiny{font-size:.8rem;color:var(--muted)}
     .topnav{display:flex;gap:8px;margin-bottom:10px}
     .topnav button{padding:10px;font-weight:600}
@@ -104,6 +106,7 @@
     <p class="muted">Early Eagle Academy</p>
     <h1>Classroom Label Maker</h1>
     <p class="muted">Take a photo. Let AI identify it. Make matching bilingual labels.</p>
+    <div id="cloudStatus" class="status loading">Connecting your saved label queue…</div>
 
     <div class="stack">
       <button class="primary" id="startBtn">📷 Make a Label</button>
@@ -234,18 +237,87 @@
     <button class="secondary" id="libraryBack">← Home</button>
     <div class="card">
       <h2>My Labels</h2>
-      <p class="muted">This prototype keeps the current-session library in memory. Supabase persistence comes next.</p>
+      <p class="muted">Approved labels are saved here permanently so you can reuse them later.</p>
       <div id="libraryItems"><p class="muted">No approved labels saved yet.</p></div>
     </div>
   </section>
 
-  <p class="footer-note">The OpenAI secret key is stored in Supabase, not in this page. Photo identification uses your deployed Supabase Edge Function.</p>
+  <p class="footer-note">Your print queue and label library are saved in Supabase. Labels stay in Ready to Print until you mark them printed.</p>
 </div>
 
 <script>
 const FUNCTION_URL = "https://ctmqvbsjliinlddfolti.supabase.co/functions/v1/identify-material";
+const SUPABASE_URL = "https://ctmqvbsjliinlddfolti.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AYbs6V2u0qPo-jLTkTFlBQ_1ps7DaZC";
+let supabase = null;
+let cloudReady = false;
+let currentUser = null;
 let backgroundRemover = null;
 
+async function initCloud(){
+  const status = $("cloudStatus");
+  try{
+    const mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/+esm");
+    supabase = mod.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
+    });
+    let {data:{session},error} = await supabase.auth.getSession();
+    if(error) throw error;
+    if(!session){
+      const signed = await supabase.auth.signInAnonymously();
+      if(signed.error) throw signed.error;
+      session = signed.data.session;
+    }
+    currentUser = session?.user || null;
+    if(!currentUser) throw new Error("Could not create a private app session.");
+    cloudReady = true;
+    status.className="status ok";
+    status.textContent="✓ Ready to Print and My Labels are saved between sessions.";
+    await loadCloudData();
+  }catch(err){
+    console.error("Supabase startup error:",err);
+    cloudReady=false;
+    status.className="status error";
+    status.textContent="Cloud saving is unavailable right now. The app will still work, but new queue items may only last for this session.";
+  }
+}
+async function loadCloudData(){
+  if(!cloudReady || !supabase) return;
+  const [qRes,lRes] = await Promise.all([
+    supabase.from("print_queue").select("*").is("printed_at",null).order("created_at",{ascending:true}),
+    supabase.from("labels").select("*").order("created_at",{ascending:false})
+  ]);
+  if(qRes.error) throw qRes.error;
+  if(lRes.error) throw lRes.error;
+  queue=(qRes.data||[]).map(x=>({
+    id:x.id,label_id:x.label_id,english:x.english,spanish:x.spanish,
+    photo:x.photo_data||"",size:x.size,created_at:x.created_at
+  }));
+  library=(lRes.data||[]).map(x=>({
+    id:x.id,english:x.english,spanish:x.spanish,photo:x.photo_data||"",created_at:x.created_at
+  }));
+  refreshQueue();
+  refreshLibrary();
+}
+async function prepareCloudPhoto(dataUrl){
+  if(!dataUrl) return "";
+  try{
+    const img=new Image();
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=dataUrl;});
+    const maxSide=900;
+    const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+    const w=Math.max(1,Math.round(img.naturalWidth*scale));
+    const h=Math.max(1,Math.round(img.naturalHeight*scale));
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    const ctx=c.getContext("2d");
+    ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,w,h);
+    ctx.drawImage(img,0,0,w,h);
+    return c.toDataURL("image/jpeg",0.86);
+  }catch(err){
+    console.warn("Could not optimize cloud photo:",err);
+    return dataUrl;
+  }
+}
 async function getBackgroundRemover(){
   if(backgroundRemover) return backgroundRemover;
   try{
@@ -430,57 +502,111 @@ function updateSetSummary(){
   if(selectedSet==="single") txt="<strong>Creating 1 label</strong><br>"+$("singleSize").value;
   $("setSummary").innerHTML=txt;
 }
-function addQueue(){
-  const itemBase={
-    english:$("englishInput").value.trim() || "Material",
-    spanish:$("spanishInput").value.trim() || "material",
-    photo:activePhotoDataUrl || photoDataUrl
-  };
-  const sizes = selectedSet==="matching"
-    ? ["Business Card · 3.5 × 2 in","Business Card · 3.5 × 2 in"]
-    : selectedSet==="different"
-      ? ["Business Card · 3.5 × 2 in","CP Basket · 3 × 2.5 in"]
-      : [$("singleSize").value];
-  sizes.forEach(size=>queue.push({...itemBase,size}));
-  if(!library.some(x=>x.english===itemBase.english && x.spanish===itemBase.spanish)){
-    library.push(itemBase);
+async function addQueue(){
+  const btn=$("addToQueue");
+  const originalText=btn.textContent;
+  btn.disabled=true;
+  btn.textContent="Saving…";
+  try{
+    const english=$("englishInput").value.trim() || "Material";
+    const spanish=$("spanishInput").value.trim() || "material";
+    const storedPhoto=await prepareCloudPhoto(activePhotoDataUrl || photoDataUrl);
+    const sizes = selectedSet==="matching"
+      ? ["Business Card · 3.5 × 2 in","Business Card · 3.5 × 2 in"]
+      : selectedSet==="different"
+        ? ["Business Card · 3.5 × 2 in","CP Basket · 3 × 2.5 in"]
+        : [$("singleSize").value];
+
+    if(cloudReady && supabase){
+      let label=library.find(x=>x.english.toLowerCase()===english.toLowerCase() && x.spanish.toLowerCase()===spanish.toLowerCase());
+      if(!label){
+        const saved=await supabase.from("labels")
+          .insert({english,spanish,photo_data:storedPhoto})
+          .select("*").single();
+        if(saved.error) throw saved.error;
+        label={id:saved.data.id,english:saved.data.english,spanish:saved.data.spanish,photo:saved.data.photo_data||""};
+      }
+      const rows=sizes.map(size=>({
+        label_id:label.id,english,spanish,photo_data:storedPhoto,size
+      }));
+      const queued=await supabase.from("print_queue").insert(rows).select("*");
+      if(queued.error) throw queued.error;
+      await loadCloudData();
+    }else{
+      const itemBase={english,spanish,photo:storedPhoto};
+      sizes.forEach(size=>queue.push({...itemBase,size,id:crypto.randomUUID()}));
+      if(!library.some(x=>x.english===english && x.spanish===spanish)) library.push(itemBase);
+      refreshQueue(); refreshLibrary();
+    }
+    show("queue");
+  }catch(err){
+    console.error("Save queue error:",err);
+    alert("I couldn't save this label to the persistent queue. Please try again.");
+  }finally{
+    btn.disabled=false;
+    btn.textContent=originalText;
   }
-  refreshQueue();
-  refreshLibrary();
-  show("queue");
+}
+async function markPrinted(id){
+  try{
+    if(cloudReady && supabase){
+      const res=await supabase.from("print_queue").update({printed_at:new Date().toISOString()}).eq("id",id);
+      if(res.error) throw res.error;
+      await loadCloudData();
+    }else{
+      queue=queue.filter(x=>x.id!==id); refreshQueue();
+    }
+  }catch(err){
+    console.error(err); alert("I couldn't mark that label printed. Please try again.");
+  }
+}
+async function removeQueueItem(id){
+  try{
+    if(cloudReady && supabase){
+      const res=await supabase.from("print_queue").delete().eq("id",id);
+      if(res.error) throw res.error;
+      await loadCloudData();
+    }else{
+      queue=queue.filter(x=>x.id!==id); refreshQueue();
+    }
+  }catch(err){
+    console.error(err); alert("I couldn't remove that queue item. Please try again.");
+  }
 }
 function refreshQueue(){
-  $("queueCount").textContent=`(${queue.length})`;
-  $("queueSummary").textContent=queue.length ? `${queue.length} label${queue.length===1?"":"s"} waiting.` : "Nothing queued yet.";
-  $("mockSheets").classList.toggle("hidden",queue.length===0);
-  $("nextMaterialBtn").classList.toggle("hidden",queue.length===0);
-  $("queueItems").innerHTML="";
-  queue.forEach((item,i)=>{
-    const d=document.createElement("div");
-    d.className="queue-item";
+  const count=queue.length;
+  $("queueCount").textContent=`(${count})`;
+  $("queueSummary").textContent=count ? `${count} label${count===1?"":"s"} waiting — they will stay here until you mark them printed.` : "Nothing queued yet.";
+  $("mockSheets").classList.toggle("hidden",count===0);
+  $("nextMaterialBtn").classList.toggle("hidden",count===0);
+  const wrap=$("queueItems"); wrap.innerHTML="";
+  queue.forEach(item=>{
+    const d=document.createElement("div"); d.className="queue-item";
     const left=document.createElement("div");
     const name=document.createElement("strong"); name.textContent=item.english;
     const spanish=document.createElement("div"); spanish.style.marginTop="2px"; spanish.textContent=item.spanish;
     const size=document.createElement("div"); size.className="tiny"; size.style.marginTop="3px"; size.textContent=item.size;
     left.append(name,spanish,size);
-    const b=document.createElement("button"); b.className="secondary danger"; b.style.width="auto"; b.style.padding="8px 10px"; b.textContent="Remove";
-    b.addEventListener("click",()=>{queue.splice(i,1);refreshQueue();});
-    d.append(left,b);
-    $("queueItems").append(d);
+    const actions=document.createElement("div"); actions.className="queue-actions";
+    const printed=document.createElement("button"); printed.className="primary"; printed.textContent="✓ Printed";
+    printed.addEventListener("click",()=>markPrinted(item.id));
+    const remove=document.createElement("button"); remove.className="secondary danger"; remove.textContent="Remove";
+    remove.addEventListener("click",()=>removeQueueItem(item.id));
+    actions.append(printed,remove);
+    d.append(left,actions); wrap.appendChild(d);
   });
 }
 function refreshLibrary(){
-  $("libraryItems").innerHTML="";
-  if(!library.length){$("libraryItems").innerHTML='<p class="muted">No approved labels saved yet.</p>';return;}
+  const wrap=$("libraryItems"); wrap.innerHTML="";
+  if(!library.length){wrap.innerHTML='<p class="muted">No approved labels saved yet.</p>';return;}
   library.forEach(item=>{
     const d=document.createElement("div"); d.className="queue-item";
     const left=document.createElement("div");
     const e=document.createElement("strong"); e.textContent=item.english;
-    const s=document.createElement("div"); s.className="tiny"; s.textContent=item.spanish;
-    left.append(e,s); d.append(left); $("libraryItems").append(d);
+    const sp=document.createElement("div"); sp.className="tiny"; sp.textContent=item.spanish;
+    left.append(e,sp); d.append(left); wrap.appendChild(d);
   });
 }
-
 $("startBtn").addEventListener("click",()=>show("capture"));
 $("queueBtn").addEventListener("click",()=>{refreshQueue();show("queue")});
 $("libraryBtn").addEventListener("click",()=>{refreshLibrary();show("library")});
@@ -541,6 +667,7 @@ $("useOriginalBtn").addEventListener("click",()=>{
 $("retryCleanupBtn").addEventListener("click",cleanBackground);
 $("mockSheets").addEventListener("click",()=>$("sheetMsg").classList.remove("hidden"));
 updateSetSummary();
+initCloud();
 </script>
 </body>
 </html>
