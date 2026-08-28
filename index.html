@@ -1,0 +1,2894 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eff6ff">
+  <title>Early Eagle Label Maker</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="application-name" content="Early Eagle Label Maker">
+  <meta name="apple-mobile-web-app-title" content="Early Eagle Labels">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <style>
+    :root{
+      --blue:#1f5f9d;
+      --blue2:#eaf4ff;
+      --ink:#17324d;
+      --muted:#66788a;
+      --line:#d9e3ec;
+      --ok:#177245;
+      --warn:#9a6700;
+      --bad:#a12622;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;background:#f7fbff;color:var(--ink);
+      font-family:"Trebuchet MS","Arial Rounded MT Bold",Arial,sans-serif;
+    }
+    .app{max-width:560px;margin:auto;padding:18px 16px 40px}
+    h1,h2,p{margin-top:0}
+    h1{font-size:1.7rem;margin-bottom:4px}
+    h2{font-size:1.25rem;margin-bottom:8px}
+    .muted{color:var(--muted);font-size:.94rem}
+    .card{background:white;border:1px solid var(--line);border-radius:22px;padding:16px;margin:14px 0}
+    button,.btn{
+      width:100%;border:0;border-radius:18px;padding:15px 16px;
+      font:inherit;font-weight:700;cursor:pointer;text-align:center;
+    }
+    .primary{background:var(--blue);color:white}
+    .secondary{background:white;color:var(--ink);border:1px solid var(--line)}
+    .soft{background:var(--blue2);color:var(--ink)}
+    .danger{color:var(--bad)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .stack{display:grid;gap:10px}
+    .hidden{display:none!important}
+    label{display:block;font-weight:700;margin:10px 0 6px}
+    input,select{
+      width:100%;padding:13px;border:1px solid #bccad6;border-radius:14px;
+      font:inherit;background:white;color:var(--ink)
+    }
+    .camera-box{
+      border:2px dashed #a9bfd2;border-radius:22px;padding:24px;text-align:center;background:white;
+    }
+    .camera-icon{font-size:3.5rem}
+    input[type=file]{
+      width:100%;padding:11px;background:white;
+    }
+    .preview-photo{
+      width:100%;max-height:300px;object-fit:contain;background:white;
+      border:1px solid var(--line);border-radius:18px;padding:6px;
+    }
+    .status{
+      padding:13px 14px;border-radius:14px;margin-top:12px;font-size:.95rem
+    }
+    .status.loading{background:#fff8dd;color:#725400}
+    .status.ok{background:#e8f7ee;color:#175a37}
+    .status.error{background:#fff0ef;color:#8b2420}
+    .label-preview{
+      aspect-ratio:1.75/1;
+      background:linear-gradient(145deg,#edf6fd 0%,#f7fbff 48%,#e7f2fb 100%);
+      border:1px solid #d8e8f5;
+      border-radius:20px;
+      padding:9px;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
+    .label-preview.cp{aspect-ratio:1.2/1}
+    .label-preview::before{
+      content:"";
+      position:absolute;
+      inset:9px;
+      border-radius:16px;
+      pointer-events:none;
+    }
+    .label-preview{position:relative}
+    .label-preview > .label-image-wrap,
+    .label-preview > .label-text{position:relative;z-index:1}
+    .label-image-wrap{
+      flex:1;display:flex;align-items:center;justify-content:center;min-height:0;
+      background:#fff;
+      border:2px solid rgba(80,151,207,.55);
+      border-bottom:0;
+      border-radius:16px 16px 0 0;
+      padding:7px 8px 2px;
+      box-shadow:0 5px 12px rgba(47,91,126,.10);
+    }
+    .label-image-wrap img{
+      max-width:100%;max-height:100%;object-fit:contain;
+    }
+    .label-text{
+      border:2px solid rgba(80,151,207,.55);
+      border-top:1.5px solid #5b9fd1;
+      border-radius:0 0 16px 16px;
+      padding:5px 8px 7px;
+      text-align:center;
+      background:#fff;
+      box-shadow:0 5px 12px rgba(47,91,126,.10)
+    }
+    .label-en{font-size:1.2rem;font-weight:800;color:#0e4c88}
+    .label-es{font-size:1rem;font-weight:700;color:#111;margin-top:2px}
+    .pill{
+      display:inline-block;padding:6px 9px;border-radius:999px;background:var(--blue2);
+      font-size:.82rem;margin:2px 3px 2px 0
+    }
+    .choice{
+      border:2px solid var(--line);border-radius:18px;padding:14px;margin:10px 0;
+      background:white;cursor:pointer
+    }
+    .choice.selected{border-color:var(--blue);background:var(--blue2)}
+    .choice strong{display:block;margin-bottom:3px}
+    .queue-item{
+      display:flex;justify-content:space-between;gap:10px;align-items:center;
+      border:1px solid var(--line);border-radius:15px;padding:11px;margin:8px 0;background:white
+    }
+    .queue-actions{display:grid;gap:6px;min-width:112px}
+    .queue-actions button{padding:8px 10px;font-size:.85rem}
+    .tiny{font-size:.8rem;color:var(--muted)}
+    .topnav{display:flex;gap:8px;margin-bottom:10px}
+    .topnav button{padding:10px;font-weight:600}
+    .footer-note{font-size:.78rem;color:var(--muted);margin-top:20px}
+    .account-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 14px;padding:10px 12px;border:1px solid var(--line);border-radius:15px;background:white}
+    .account-bar button{width:auto;padding:8px 11px;border-radius:12px;font-size:.84rem}
+    .account-email{font-size:.84rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .auth-step{margin-top:10px}
+    .home-create-title{font-size:1.08rem;text-align:center;margin:18px 0 12px;color:#174f83}
+    .home-create-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .home-action{min-height:142px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:14px 10px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-shadow:0 2px 8px rgba(23,50,77,.05)}
+    .home-action .home-icon{width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem;margin-bottom:7px}
+    .home-action:nth-child(1) .home-icon{background:#e6f3ff}.home-action:nth-child(2) .home-icon{background:#eaf8ef}.home-action:nth-child(3) .home-icon{background:#f1edff}.home-action:nth-child(4) .home-icon{background:#fff4d9}
+    .home-action strong{font-size:1.05rem;color:#0d3154;margin-bottom:3px}.home-action small{font-size:.76rem;color:var(--muted);line-height:1.25;font-weight:500}
+    .home-manage-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+    .home-manage{position:relative;min-height:82px;border-radius:20px;padding:12px 10px;display:flex;align-items:center;justify-content:center;gap:8px;text-align:left;border:1px solid var(--line);font-weight:800}
+    .home-manage.print{background:#eaf6ff}.home-manage.labels{background:#edf8ee}.home-manage-icon{font-size:1.65rem}
+    .home-count{position:absolute;right:10px;top:9px;min-width:25px;height:25px;border-radius:999px;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.74rem;padding:0 7px}
+    .home-account{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;margin-top:14px;padding:9px 10px;background:#fff;border:1px solid var(--line);border-radius:16px;font-size:.75rem}
+    .home-sync{display:flex;align-items:center;gap:5px;color:#177245;font-weight:800;white-space:nowrap}.home-sync-dot{width:9px;height:9px;border-radius:50%;background:#20a35a}
+    .home-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;color:var(--muted)}.home-account button{width:auto;padding:7px 9px;border-radius:11px;font-size:.74rem}
+    @media(max-width:380px){.home-action{min-height:130px;padding:11px 8px}.home-action small{font-size:.7rem}}
+    .print-options{display:flex;align-items:center;gap:10px;margin:12px 0;padding:11px 12px;border:1px solid var(--line);border-radius:14px;background:#f9fcff}
+    .print-options input{width:auto;transform:scale(1.25)}
+    .sheet-preview-wrap{display:grid;gap:14px;margin-top:12px}
+    .sheet-preview{
+      position:relative;width:100%;aspect-ratio:8.5/11;background:#fff;
+      border:1px solid #b7c6d4;border-radius:8px;overflow:hidden;
+      box-shadow:0 2px 8px rgba(23,50,77,.08)
+    }
+    .sheet-page-label{
+      position:absolute;
+      background:#fff;
+      box-sizing:border-box
+    }
+    .label-art-bg{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+    .label-art-bg + .sheet-page-inner,
+    .label-art-bg + .print-label-inner{z-index:1}
+    .sheet-page-label.cut-lines{border:1px dashed #7f8d99}
+    .sheet-page-inner{
+      position:absolute;
+      z-index:1;
+      inset:3.5%;
+      border:2px solid rgba(80,151,207,.55);
+      border-radius:8px;
+      padding:3%;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+      background:#fff;
+      box-shadow:0 3px 7px rgba(47,91,126,.12)
+    }
+    .sheet-page-image{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+    .sheet-page-image img{max-width:100%;max-height:100%;object-fit:contain}
+    .sheet-page-text{border-top:1px solid #5b9fd1;padding-top:2%;text-align:center;line-height:1.05}
+    .sheet-page-en{font-weight:800;color:#0e4c88}
+    .sheet-page-es{font-weight:700;color:#111;margin-top:1.5%}
+    #printRoot{display:none}
+    .raster-sheet-label{position:absolute;box-sizing:border-box}
+    .raster-sheet-label img{display:block;width:100%;height:100%;object-fit:fill}
+    .raster-sheet-label.cut-lines{outline:1px dashed #7f8d99;outline-offset:0}
+
+    @media print{
+      @page{size:8.5in 11in;margin:0}
+      html,body{margin:0!important;padding:0!important;background:#fff!important}
+      body>*{display:none!important}
+      #printRoot{
+        display:block!important;position:absolute!important;left:0;top:0;width:8.5in;
+        margin:0!important;padding:0!important;background:#fff!important
+      }
+      .print-page{
+        position:relative;width:8.5in;height:11in;overflow:hidden;background:#fff;
+        break-after:page;page-break-after:always
+      }
+      .print-page:last-child{break-after:auto;page-break-after:auto}
+      .print-label{
+        position:absolute;
+        box-sizing:border-box;
+        background:#fff;
+        overflow:hidden;
+        -webkit-print-color-adjust:exact;print-color-adjust:exact
+      }
+      .print-label.cut-lines{border:.008in dashed #7a8792}
+      .print-label-inner{
+        position:absolute;
+        z-index:1;
+        inset:.075in;
+        border:.025in solid rgba(80,151,207,.62);
+        border-radius:.13in;
+        padding:.075in;
+        display:flex;
+        flex-direction:column;
+        overflow:hidden;
+        background:#fff;
+        box-shadow:0 .035in .075in rgba(47,91,126,.13)
+      }
+      .print-label-image{
+        flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden
+      }
+      .print-label-image img{max-width:100%;max-height:100%;object-fit:contain}
+      .print-label-text{
+        flex:0 0 auto;
+        border-top:.016in solid #5b9fd1;
+        padding-top:.04in;
+        text-align:center;
+        line-height:1.02;
+        background:#fff
+      }
+      .print-label-en{font-family:Arial,sans-serif;font-size:13pt;font-weight:800;color:#0e4c88}
+      .print-label-es{font-family:Arial,sans-serif;font-size:10.5pt;font-weight:700;color:#111;margin-top:.025in}
+      .print-label.cp .print-label-en{font-size:12pt}
+      .print-label.cp .print-label-es{font-size:10pt}
+      .raster-print-label{
+        position:absolute;box-sizing:border-box;background:#fff;overflow:visible
+      }
+      .raster-print-label img{
+        display:block;width:100%;height:100%;object-fit:fill;
+        -webkit-print-color-adjust:exact;print-color-adjust:exact
+      }
+      .raster-print-label.cut-lines{outline:.008in dashed #7a8792;outline-offset:0}
+    }
+
+    textarea{width:100%;min-height:155px;padding:13px;border:1px solid #bccad6;border-radius:14px;font:inherit;background:white;color:var(--ink);resize:vertical}
+    .tab-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+    .batch-item{border:1px solid var(--line);border-radius:18px;padding:12px;margin:10px 0;background:white}
+    .batch-grid{display:grid;grid-template-columns:96px 1fr;gap:12px;align-items:start}
+    .batch-thumb{width:96px;height:96px;object-fit:contain;border:1px solid var(--line);border-radius:14px;background:white}
+    .batch-status{font-size:.8rem;color:var(--muted);margin-top:4px}
+    .batch-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}
+    .batch-actions button{padding:9px 10px;font-size:.85rem}
+
+    @media (max-width:380px){.row{grid-template-columns:1fr}.label-en{font-size:1.05rem}.label-es{font-size:.9rem}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <section id="home">
+    <p class="muted" style="margin-bottom:5px">Early Eagle Academy</p><h1>Classroom Label Maker</h1>
+    <p class="muted">Take a photo. Let AI identify it. Make matching bilingual labels.</p>
+    <h2 class="home-create-title">What would you like to create?</h2>
+    <div class="home-create-grid">
+      <button class="home-action" id="homePhotoBtn"><span class="home-icon">📷</span><strong>Photo</strong><small>Take a photo and let AI identify it.</small></button>
+      <input id="homeCameraInput" type="file" accept="image/*" capture="environment" class="hidden">
+      <button class="home-action" id="homeGalleryBtn"><span class="home-icon">🖼️</span><strong>Gallery</strong><small>Choose a photo from your gallery.</small></button>
+      <input id="homeGalleryInput" type="file" accept="image/*" class="hidden">
+      <button class="home-action" id="homeProductBtn"><span class="home-icon">🔗</span><strong>Product Link</strong><small>Paste a product link to create a label.</small></button>
+      <button class="home-action" id="homeListBtn"><span class="home-icon">📝</span><strong>Make a List</strong><small>Create multiple labels from your list.</small></button>
+    </div>
+    <div class="home-manage-grid">
+      <button class="home-manage print" id="queueBtn"><span class="home-manage-icon">🖨️</span><span>Ready to Print</span><span class="home-count" id="queueCount">0</span></button>
+      <button class="home-manage labels" id="libraryBtn"><span class="home-manage-icon">🏷️</span><span>My Labels</span></button>
+    </div>
+    <div class="home-account"><div class="home-sync"><span class="home-sync-dot"></span><span>Synced</span></div><div id="accountStatusText" class="home-email">Private device session</div><button id="accountBtn" class="soft">Account</button></div>
+    <div id="cloudStatus" class="status loading hidden">Connecting your saved label queue…</div><div id="accountStatusSub" class="tiny hidden"></div>
+  </section>
+
+  <section id="capture" class="hidden">
+    <button class="secondary" id="captureBack">← Home</button>
+    <div class="card">
+      <h2>Photograph the material</h2>
+      <p class="muted">Try to fill the picture with the toy/material you want labeled.</p>
+      <div class="camera-box">
+        <div class="camera-icon">📷</div>
+        <label for="cameraInput">Take a photo</label>
+        <input id="cameraInput" type="file" accept="image/*" capture="environment">
+        <label for="galleryInput">Or choose from gallery</label>
+        <input id="galleryInput" type="file" accept="image/*">
+      </div>
+      <img id="capturedPreview" class="preview-photo hidden" alt="Photo selected for identification">
+      <div id="identifyStatus" class="status hidden" aria-live="polite"></div>
+      <button id="retryIdentify" class="secondary hidden">Try Identification Again</button>
+    </div>
+  </section>
+
+  <section id="confirm" class="hidden">
+    <button class="secondary" id="confirmBack">← Retake Photo</button>
+    <div class="card">
+      <span class="pill">AI identification</span>
+      <h2 style="margin-top:10px">I think these are…</h2>
+      <img id="confirmPhoto" class="preview-photo" alt="Material photo">
+      <div id="cleanupStatus" class="status hidden" aria-live="polite"></div>
+      <div id="cleanupStrengthWrap" class="hidden" style="margin-top:10px">
+        <div class="tiny" style="margin-bottom:6px">Cleanup strength</div>
+        <div class="row">
+          <button id="normalCleanupBtn" class="primary">Normal</button>
+          <button id="strongCleanupBtn" class="secondary">Strong</button>
+        </div>
+        <p class="tiny" style="margin:7px 0 0">Use Strong when pale tabletop, carpet, or other background scraps remain around the object.</p>
+      </div>
+      <div id="photoChoiceRow" class="row hidden" style="margin-top:10px">
+        <button id="useCleanedBtn" class="primary">✓ Use Cleanup</button>
+        <button id="useOriginalBtn" class="secondary">Original Photo</button>
+      </div>
+      <button id="retryCleanupBtn" class="secondary hidden" style="margin-top:10px">Retry Background Cleanup</button>
+      <div style="margin-top:12px">
+        <div id="foundEnglish" style="font-size:1.35rem;font-weight:800"></div>
+        <div id="foundSpanish" style="font-size:1.05rem;margin-top:3px"></div>
+        <p class="muted" id="foundCategory" style="margin:8px 0 0"></p>
+        <p class="muted" id="foundConfidence"></p>
+        <p class="tiny" id="foundNotes"></p>
+      </div>
+      <button id="thatsRight" class="primary">✓ That's Right</button>
+      <button id="editIdentification" class="secondary" style="margin-top:8px">✏️ Edit Wording</button>
+    </div>
+  </section>
+
+  <section id="preview" class="hidden">
+    <button class="secondary" id="previewBack">← Back</button>
+    <div class="card">
+      <h2>Label Preview</h2>
+      <p id="photoModeNote" class="muted">Using cleaned photo on white background.</p>
+      <div id="labelCard" class="label-preview">
+        <div class="label-image-wrap"><img id="labelPhoto" alt=""></div>
+        <div class="label-text">
+          <div id="labelEnglish" class="label-en"></div>
+          <div id="labelSpanish" class="label-es"></div>
+        </div>
+      </div>
+
+      <label for="englishInput">English</label>
+      <input id="englishInput" autocomplete="off">
+      <label for="spanishInput">Spanish</label>
+      <input id="spanishInput" autocomplete="off">
+      <div id="translationStatus" class="tiny" style="margin-top:6px"></div>
+
+      <button id="chooseSetBtn" class="primary" style="margin-top:14px">Choose Label Set</button>
+    </div>
+  </section>
+
+  <section id="sets" class="hidden">
+    <button class="secondary" id="setsBack">← Label Preview</button>
+    <div class="card">
+      <h2>Which label set?</h2>
+      <p class="muted">Your two normal setups are one tap.</p>
+
+      <div class="choice selected" data-set="matching">
+        <strong>Two Matching Labels</strong>
+        <span>2 × Business Card (3.375 × 2 in)</span>
+      </div>
+
+      <div class="choice" data-set="different">
+        <strong>Two Different-Size Labels</strong>
+        <span>1 × Business Card + 1 × CP Basket</span>
+      </div>
+
+      <div class="choice" data-set="single">
+        <strong>Single Label</strong>
+        <span>Choose the size below</span>
+      </div>
+
+      <div id="singleSizeWrap" class="hidden">
+        <label for="singleSize">Single label size</label>
+        <select id="singleSize">
+          <option value="Business Card · 3.375 × 2 in">Business Card · 3.375 × 2 in</option>
+          <option value="CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)">CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)</option>
+        </select>
+      </div>
+
+      <div class="card soft" id="setSummary" style="margin-bottom:10px"></div>
+      <button id="addToQueue" class="primary">✓ Add to Print Queue</button>
+    </div>
+  </section>
+
+  <section id="makeList" class="hidden">
+    <button class="secondary" id="makeListBack">← Home</button>
+    <div class="card">
+      <h2>Make a List</h2>
+      <p class="muted">Enter one classroom material per line. The app will create bilingual label drafts for all of them at once.</p>
+      <label for="makeListInput">One material per line</label>
+      <textarea id="makeListInput" placeholder="stickers&#10;googly eyes&#10;magnetic letters&#10;farm animals"></textarea>
+      <p class="tiny">You’ll review everything before it is saved or added to Ready to Print.</p>
+      <button id="makeListCreateBtn" class="primary">Create Label Drafts</button>
+      <div id="makeListProgress" class="status hidden"></div>
+    </div>
+  </section>
+
+  <section id="batch" class="hidden">
+    <button class="secondary" id="batchBack">← Home</button>
+    <div class="card">
+      <h2 id="batchTitle">Create Labels Ahead</h2>
+      <p class="muted" id="batchDescription">Paste a whole list of materials, or paste one product link. Review everything before it goes to your saved library and print queue.</p>
+
+      <div class="tab-row" id="batchTabRow">
+        <button id="listTabBtn" class="primary">📝 From a List</button>
+        <button id="linkTabBtn" class="secondary">🔗 Product Link</button>
+      </div>
+
+      <div id="batchListPane">
+        <label for="batchListInput">One material per line</label>
+        <textarea id="batchListInput" placeholder="stickers&#10;googly eyes&#10;magnetic letters&#10;farm animals"></textarea>
+        <p class="tiny">The app will create concise English/Spanish wording and a clean representative picture for each item.</p>
+        <button id="createBatchBtn" class="primary">Create Label Drafts</button>
+      </div>
+
+      <div id="batchLinkPane" class="hidden">
+        <label for="productLinkInput">Product page link</label>
+        <input id="productLinkInput" type="url" placeholder="https://www.lakeshorelearning.com/...">
+        <p class="tiny">The app will try to use the product page's real title and image first. If the site blocks that, it can make a representative picture instead.</p>
+        <button id="createLinkDraftBtn" class="primary">Create Product Label</button>
+      </div>
+
+      <div id="batchProgress" class="status hidden" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section id="batchReview" class="hidden">
+    <button class="secondary" id="batchReviewBack">← Create Ahead</button>
+    <div class="card">
+      <h2>Review Labels</h2>
+      <p class="muted">Edit anything you want before saving. Generated pictures are representative; linked product pages use the real product image when available.</p>
+
+      <label for="batchSetSelect">Apply label set to all</label>
+      <select id="batchSetSelect">
+        <option value="matching">Two Matching · 2 Business Cards</option>
+        <option value="different">Two Different Sizes · Business Card + CP Basket</option>
+        <option value="single-business">Single · Business Card</option>
+        <option value="single-cp">Single · CP Basket</option>
+      </select>
+
+      <div id="batchReviewItems"></div>
+      <button id="saveAllBatchBtn" class="primary">✓ Save All + Add to Print Queue</button>
+    </div>
+  </section>
+
+  <section id="queue" class="hidden">
+    <button class="secondary" id="queueBack">← Home</button>
+    <div class="card">
+      <h2>Ready to Print</h2>
+      <p class="muted" id="queueSummary">Nothing queued yet.</p>
+      <div id="queueItems"></div>
+      <button id="nextMaterialBtn" class="primary hidden">＋ Create Next Label</button>
+      <button id="mockSheets" class="secondary hidden" style="margin-top:8px">Create 8.5 × 11 Print Sheets</button>
+    </div>
+  </section>
+
+  <section id="printPreview" class="hidden">
+    <button class="secondary" id="printPreviewBack">← Ready to Print</button>
+    <div class="card">
+      <h2>Print Sheets</h2>
+      <p class="muted" id="printSheetSummary">Your labels are arranged at their true physical sizes on 8.5 × 11 inch paper.</p>
+
+      <div class="print-options">
+        <input id="cutLinesToggle" type="checkbox" checked>
+        <label for="cutLinesToggle" style="margin:0">Show cut lines</label>
+      </div>
+
+      <button id="printNowBtn" class="primary">🖨️ Print / Save PDF</button>
+      <p class="tiny" style="margin-top:8px">In your printer settings, use Letter / 8.5 × 11 paper and 100% / Actual Size. Do not choose “Fit to page.”</p>
+
+      <div id="sheetPreviewPages" class="sheet-preview-wrap"></div>
+
+      <div class="status ok" style="margin-top:14px">
+        Printing does not remove anything from Ready to Print. After you confirm the sheets printed correctly, use the button below.
+      </div>
+      <button id="markSheetPrintedBtn" class="secondary" style="margin-top:10px">✓ Mark These Labels Printed</button>
+    </div>
+  </section>
+
+  <section id="library" class="hidden">
+    <button class="secondary" id="libraryBack">← Home</button>
+    <div class="card">
+      <h2>My Labels</h2>
+      <p class="muted">Search your permanent label library and reprint without using AI again.</p>
+      <label for="librarySearch">Search labels</label>
+      <input id="librarySearch" type="search" placeholder="Try scissors, tijeras, blocks…" autocomplete="off">
+      <div id="libraryItems"><p class="muted">No approved labels saved yet.</p></div>
+    </div>
+  </section>
+
+  <section id="reprint" class="hidden">
+    <button class="secondary" id="reprintBack">← My Labels</button>
+    <div class="card">
+      <h2>Reprint Saved Label</h2>
+      <p class="muted">No AI needed — this uses your approved saved picture and wording.</p>
+      <div class="label-preview">
+        <div class="label-image-wrap"><img id="reprintPhoto" alt=""></div>
+        <div class="label-text">
+          <div id="reprintEnglish" class="label-en"></div>
+          <div id="reprintSpanish" class="label-es"></div>
+        </div>
+      </div>
+
+      <div class="choice reprint-choice selected" data-reprint-set="matching">
+        <strong>Two Matching Labels</strong>
+        <span>2 × Business Card (3.375 × 2 in)</span>
+      </div>
+      <div class="choice reprint-choice" data-reprint-set="different">
+        <strong>Two Different-Size Labels</strong>
+        <span>1 × Business Card + 1 × CP Basket</span>
+      </div>
+      <div class="choice reprint-choice" data-reprint-set="single">
+        <strong>Single Label</strong>
+        <span>Choose the size below</span>
+      </div>
+      <div id="reprintSingleWrap" class="hidden">
+        <label for="reprintSingleSize">Single label size</label>
+        <select id="reprintSingleSize">
+          <option value="Business Card · 3.375 × 2 in">Business Card · 3.375 × 2 in</option>
+          <option value="CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)">CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)</option>
+        </select>
+      </div>
+      <button id="reprintQueueBtn" class="primary" style="margin-top:12px">Add Reprint to Queue</button>
+    </div>
+  </section>
+
+  <section id="account" class="hidden">
+    <button class="secondary" id="accountBack">← Home</button>
+    <div class="card">
+      <h2>Use the Same Labels Everywhere</h2>
+      <p class="muted">Create an account on your phone first to keep everything you've already saved, then sign into that same account on your computer.</p>
+
+      <div id="accountCurrent" class="status ok hidden"></div>
+
+      <div id="anonymousAccountPane">
+        <h2 style="margin-top:14px">Create My Account</h2>
+        <p class="muted">This converts your current private phone session into a permanent account. Your existing labels stay attached because your Supabase user ID stays the same.</p>
+
+        <label for="accountEmail">Email address</label>
+        <input id="accountEmail" type="email" autocomplete="email" placeholder="you@example.com">
+        <button id="sendAccountCodeBtn" class="primary" style="margin-top:10px">Send Verification Code</button>
+
+        <div id="accountVerifyPane" class="auth-step hidden">
+          <label for="accountCode">Verification code from email</label>
+          <input id="accountCode" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code">
+          <button id="verifyAccountCodeBtn" class="primary" style="margin-top:10px">Verify Email</button>
+        </div>
+
+        <div id="accountPasswordPane" class="auth-step hidden">
+          <label for="newAccountPassword">Create password</label>
+          <input id="newAccountPassword" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters">
+          <label for="newAccountPassword2">Confirm password</label>
+          <input id="newAccountPassword2" type="password" autocomplete="new-password" minlength="8">
+          <button id="finishAccountBtn" class="primary" style="margin-top:10px">Finish Account Setup</button>
+        </div>
+
+        <div id="accountCreateStatus" class="status hidden" aria-live="polite"></div>
+
+        <hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
+        <h2>Already Created Your Account?</h2>
+        <p class="muted">Use this on your computer—or any other device—to open the same My Labels and Ready to Print queue.</p>
+        <label for="signInEmail">Email</label>
+        <input id="signInEmail" type="email" autocomplete="email">
+        <label for="signInPassword">Password</label>
+        <input id="signInPassword" type="password" autocomplete="current-password">
+        <button id="signInBtn" class="secondary" style="margin-top:10px">Sign In</button>
+        <div id="signInStatus" class="status hidden"></div>
+      </div>
+
+      <div id="permanentAccountPane" class="hidden">
+        <p class="muted">You're signed in. This device now uses the same cloud label library and print queue as every other device signed into this account.</p>
+        <button id="refreshAccountDataBtn" class="secondary">↻ Refresh My Labels</button>
+        <button id="signOutBtn" class="secondary danger" style="margin-top:8px">Sign Out on This Device</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="passwordRecovery" class="hidden">
+    <div class="card">
+      <h2>Set New Password</h2>
+      <p class="muted">You opened a Supabase password-recovery link. Choose a new password for your Early Eagle Label Maker account.</p>
+
+      <label for="recoveryPassword">New password</label>
+      <input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters">
+
+      <label for="recoveryPassword2">Confirm new password</label>
+      <input id="recoveryPassword2" type="password" autocomplete="new-password" minlength="8">
+
+      <button id="saveRecoveryPasswordBtn" class="primary" style="margin-top:10px">Save New Password</button>
+      <div id="recoveryStatus" class="status hidden" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <p class="footer-note">Your print queue and label library are saved in Supabase. Labels stay in Ready to Print until you mark them printed.<br><span style="opacity:.65">App build 32</span></p>
+</div>
+
+<div id="printRoot" aria-hidden="true"></div>
+
+<script>
+const FUNCTION_URL = "https://ctmqvbsjliinlddfolti.supabase.co/functions/v1/identify-material";
+const TRANSLATE_URL = "https://ctmqvbsjliinlddfolti.supabase.co/functions/v1/translate-label";
+const BATCH_LABELS_URL = "https://ctmqvbsjliinlddfolti.supabase.co/functions/v1/batch-labels";
+const SUPABASE_URL = "https://ctmqvbsjliinlddfolti.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AYbs6V2u0qPo-jLTkTFlBQ_1ps7DaZC";
+const SESSION_STORAGE_KEY = "eea_label_maker_supabase_session_v1";
+let cloudReady = false;
+let currentUser = null;
+let cloudSession = null;
+let backgroundRemover = null;
+
+async function authFetch(path, options={}){
+  const headers={
+    "apikey": SUPABASE_PUBLISHABLE_KEY,
+    "Content-Type":"application/json",
+    ...(options.headers||{})
+  };
+  const res=await fetch(SUPABASE_URL+path,{...options,headers});
+  let data=null;
+  try{data=await res.json();}catch{}
+  if(!res.ok){
+    const msg=data?.msg || data?.message || data?.error_description || data?.error || `Supabase auth error (${res.status})`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+async function userAuthFetch(path,options={}){
+  if(!cloudSession?.access_token) throw new Error("No signed-in Supabase session is available.");
+  const headers={
+    "apikey":SUPABASE_PUBLISHABLE_KEY,
+    "Authorization":`Bearer ${cloudSession.access_token}`,
+    "Content-Type":"application/json",
+    ...(options.headers||{})
+  };
+  const res=await fetch(SUPABASE_URL+path,{...options,headers});
+  let data=null;
+  try{data=await res.json();}catch{}
+  if(!res.ok){
+    const msg=data?.msg || data?.message || data?.error_description || data?.error || `Supabase account error (${res.status})`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+function userIsPermanent(user){
+  if(!user) return false;
+  if(user.is_anonymous===false) return true;
+  return !!(user.email && Array.isArray(user.identities) && user.identities.length);
+}
+
+function setAuthStatus(id,text,cls){
+  const el=$(id);
+  el.textContent=text;
+  el.className="status "+cls;
+  el.classList.remove("hidden");
+}
+
+function updateAccountUI(){
+  const permanent=userIsPermanent(currentUser);
+  const email=currentUser?.email || "";
+
+  $("anonymousAccountPane").classList.toggle("hidden",permanent);
+  $("permanentAccountPane").classList.toggle("hidden",!permanent);
+  $("accountCurrent").classList.toggle("hidden",!permanent);
+
+  if(permanent){
+    $("accountStatusText").textContent=email || "Signed in";
+    $("accountStatusSub").textContent="Synced across your devices";
+    $("accountBtn").textContent="Account";
+    $("accountCurrent").textContent=`✓ Signed in as ${email}`;
+    $("accountCurrent").className="status ok";
+  }else{
+    $("accountStatusText").textContent="Private device session";
+    $("accountStatusSub").textContent="Create an account to sync phone + computer";
+    $("accountBtn").textContent="Sync Devices";
+  }
+}
+
+async function convertAnonymousEmail(){
+  const email=$("accountEmail").value.trim();
+  if(!email || !email.includes("@")){
+    setAuthStatus("accountCreateStatus","Enter a valid email address.","error");
+    return;
+  }
+  const btn=$("sendAccountCodeBtn");
+  btn.disabled=true; btn.textContent="Sending…";
+  try{
+    // Supabase supports converting an anonymous user by adding an email identity
+    // to that same logged-in user. This preserves their user id and RLS-owned data.
+    await userAuthFetch("/auth/v1/user",{
+      method:"PUT",
+      body:JSON.stringify({email})
+    });
+    sessionStorage.setItem("eea_pending_account_email",email);
+    $("accountVerifyPane").classList.remove("hidden");
+    setAuthStatus("accountCreateStatus",`Verification sent to ${email}. Enter the code from the email below.`,"ok");
+  }catch(err){
+    console.error(err);
+    setAuthStatus("accountCreateStatus","I couldn't start account setup: "+err.message,"error");
+  }finally{
+    btn.disabled=false; btn.textContent="Send Verification Code";
+  }
+}
+
+async function verifyAccountEmail(){
+  const email=(sessionStorage.getItem("eea_pending_account_email") || $("accountEmail").value).trim();
+  const token=$("accountCode").value.trim();
+  if(!email || !token){
+    setAuthStatus("accountCreateStatus","Enter the verification code from your email.","error");
+    return;
+  }
+  const btn=$("verifyAccountCodeBtn");
+  btn.disabled=true; btn.textContent="Verifying…";
+  try{
+    const data=await authFetch("/auth/v1/verify",{
+      method:"POST",
+      body:JSON.stringify({email,token,type:"email_change"})
+    });
+
+    // verify may return a refreshed session
+    if(data?.access_token){
+      saveCloudSession(data);
+      currentUser=data.user || currentUser;
+    }else{
+      // Refresh the existing session so the verified identity appears.
+      if(cloudSession?.refresh_token){
+        const refreshed=await refreshCloudSession(cloudSession.refresh_token);
+        currentUser=refreshed?.user || currentUser;
+      }
+    }
+
+    $("accountPasswordPane").classList.remove("hidden");
+    setAuthStatus("accountCreateStatus","✓ Email verified. Now choose a password.","ok");
+  }catch(err){
+    console.error(err);
+    setAuthStatus("accountCreateStatus","That code couldn't be verified: "+err.message,"error");
+  }finally{
+    btn.disabled=false; btn.textContent="Verify Email";
+  }
+}
+
+async function finishPermanentAccount(){
+  const p1=$("newAccountPassword").value;
+  const p2=$("newAccountPassword2").value;
+  if(p1.length<8){
+    setAuthStatus("accountCreateStatus","Use a password with at least 8 characters.","error");
+    return;
+  }
+  if(p1!==p2){
+    setAuthStatus("accountCreateStatus","Those passwords don't match.","error");
+    return;
+  }
+  const btn=$("finishAccountBtn");
+  btn.disabled=true; btn.textContent="Finishing…";
+  try{
+    const data=await userAuthFetch("/auth/v1/user",{
+      method:"PUT",
+      body:JSON.stringify({password:p1})
+    });
+    if(data?.user) currentUser=data.user;
+    if(cloudSession?.refresh_token){
+      const refreshed=await refreshCloudSession(cloudSession.refresh_token);
+      currentUser=refreshed?.user || currentUser;
+    }
+    sessionStorage.removeItem("eea_pending_account_email");
+    updateAccountUI();
+    await loadCloudData();
+    setAuthStatus("accountCreateStatus","✓ Account created. Your existing labels are now attached to this permanent account.","ok");
+    setTimeout(()=>show("home"),900);
+  }catch(err){
+    console.error(err);
+    setAuthStatus("accountCreateStatus","I couldn't finish the account: "+err.message,"error");
+  }finally{
+    btn.disabled=false; btn.textContent="Finish Account Setup";
+  }
+}
+
+async function signInPermanent(){
+  const email=$("signInEmail").value.trim();
+  const password=$("signInPassword").value;
+  if(!email || !password){
+    setAuthStatus("signInStatus","Enter your email and password.","error");
+    return;
+  }
+  const btn=$("signInBtn");
+  btn.disabled=true; btn.textContent="Signing in…";
+  try{
+    const data=await authFetch("/auth/v1/token?grant_type=password",{
+      method:"POST",
+      body:JSON.stringify({email,password})
+    });
+    if(!data?.access_token || !data?.user) throw new Error("No signed-in session was returned.");
+    saveCloudSession(data);
+    currentUser=data.user;
+    cloudReady=true;
+    updateAccountUI();
+    await loadCloudData();
+    setAuthStatus("signInStatus","✓ Signed in. Loading your shared labels…","ok");
+    setTimeout(()=>show("home"),700);
+  }catch(err){
+    console.error(err);
+    setAuthStatus("signInStatus","Sign in didn't work: "+err.message,"error");
+  }finally{
+    btn.disabled=false; btn.textContent="Sign In";
+  }
+}
+
+async function signOutPermanent(){
+  if(!confirm("Sign out on this device? Your labels stay safely saved in your account.")) return;
+  try{
+    if(cloudSession?.access_token){
+      await userAuthFetch("/auth/v1/logout",{method:"POST",body:"{}"}).catch(()=>{});
+    }
+  }finally{
+    try{localStorage.removeItem(SESSION_STORAGE_KEY);}catch{}
+    cloudSession=null; currentUser=null; cloudReady=false;
+    queue=[]; library=[];
+    refreshQueue(); refreshLibrary();
+    // Create a fresh anonymous session so the app can still work locally/cloud-backed.
+    try{
+      cloudSession=await createAnonymousSession();
+      currentUser=cloudSession.user;
+      cloudReady=true;
+      await loadCloudData();
+    }catch{}
+    updateAccountUI();
+    show("home");
+  }
+}
+
+
+function parseAuthFragment(){
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  const params = new URLSearchParams(hash);
+  const type = params.get("type");
+  const access_token = params.get("access_token");
+  const refresh_token = params.get("refresh_token");
+  const expires_in = Number(params.get("expires_in") || 3600);
+  const token_type = params.get("token_type") || "bearer";
+
+  if(type === "recovery" && access_token){
+    return {type, access_token, refresh_token, expires_in, token_type};
+  }
+  return null;
+}
+
+async function startRecoveryFromUrl(){
+  const recovery = parseAuthFragment();
+  if(!recovery) return false;
+
+  const session = {
+    access_token: recovery.access_token,
+    refresh_token: recovery.refresh_token || "",
+    expires_in: recovery.expires_in,
+    token_type: recovery.token_type,
+    expires_at: Math.floor(Date.now()/1000) + recovery.expires_in
+  };
+
+  try{
+    saveCloudSession(session);
+    cloudSession = session;
+    const user = await userAuthFetch("/auth/v1/user",{method:"GET"});
+    currentUser = user?.user || user || null;
+    cloudReady = true;
+
+    history.replaceState(null,"",window.location.pathname + window.location.search);
+    show("passwordRecovery");
+    return true;
+  }catch(err){
+    console.error("Recovery-link error:",err);
+    history.replaceState(null,"",window.location.pathname + window.location.search);
+    setAuthStatus("recoveryStatus","That password-reset link could not be opened. Please request a new recovery email.","error");
+    show("passwordRecovery");
+    return true;
+  }
+}
+
+async function saveRecoveryPassword(){
+  const p1=$("recoveryPassword").value;
+  const p2=$("recoveryPassword2").value;
+
+  if(p1.length<8){
+    setAuthStatus("recoveryStatus","Use a password with at least 8 characters.","error");
+    return;
+  }
+  if(p1!==p2){
+    setAuthStatus("recoveryStatus","Those passwords don't match.","error");
+    return;
+  }
+  if(!cloudSession?.access_token){
+    setAuthStatus("recoveryStatus","The recovery session is missing. Request a new password-recovery email and open that new link.","error");
+    return;
+  }
+
+  const btn=$("saveRecoveryPasswordBtn");
+  btn.disabled=true;
+  btn.textContent="Saving…";
+
+  try{
+    const data=await userAuthFetch("/auth/v1/user",{
+      method:"PUT",
+      body:JSON.stringify({password:p1})
+    });
+
+    if(data?.user) currentUser=data.user;
+
+    if(cloudSession?.refresh_token){
+      try{
+        const refreshed=await refreshCloudSession(cloudSession.refresh_token);
+        if(refreshed?.user) currentUser=refreshed.user;
+      }catch{}
+    }
+
+    cloudReady=true;
+    updateAccountUI();
+    await loadCloudData();
+
+    setAuthStatus("recoveryStatus","✓ Password updated. You can now sign in on your laptop with this email and new password.","ok");
+    setTimeout(()=>show("home"),1200);
+  }catch(err){
+    console.error("Password recovery update error:",err);
+    setAuthStatus("recoveryStatus","I couldn't save the new password: "+err.message,"error");
+  }finally{
+    btn.disabled=false;
+    btn.textContent="Save New Password";
+  }
+}
+
+function saveCloudSession(session){
+  cloudSession=session;
+  try{localStorage.setItem(SESSION_STORAGE_KEY,JSON.stringify(session));}catch{}
+}
+function loadStoredCloudSession(){
+  try{return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY)||"null");}catch{return null;}
+}
+async function createAnonymousSession(){
+  const data=await authFetch("/auth/v1/signup",{method:"POST",body:"{}"});
+  if(!data?.access_token || !data?.user) throw new Error("Anonymous sign-in did not return a session.");
+  saveCloudSession(data);
+  return data;
+}
+async function refreshCloudSession(refreshToken){
+  const data=await authFetch("/auth/v1/token?grant_type=refresh_token",{
+    method:"POST",body:JSON.stringify({refresh_token:refreshToken})
+  });
+  if(!data?.access_token) throw new Error("Could not refresh cloud session.");
+  saveCloudSession(data);
+  return data;
+}
+async function ensureCloudSession(){
+  let stored=loadStoredCloudSession();
+  if(stored?.refresh_token){
+    try{return await refreshCloudSession(stored.refresh_token);}catch(err){
+      console.warn("Stored Supabase session could not refresh; creating a new anonymous session.",err);
+    }
+  }
+  return await createAnonymousSession();
+}
+async function restFetch(path,options={},retry=true){
+  if(!cloudSession?.access_token) throw new Error("No Supabase session is available.");
+  const headers={
+    "apikey":SUPABASE_PUBLISHABLE_KEY,
+    "Authorization":`Bearer ${cloudSession.access_token}`,
+    "Content-Type":"application/json",
+    ...(options.headers||{})
+  };
+  const res=await fetch(SUPABASE_URL+"/rest/v1/"+path,{...options,headers});
+  if(res.status===401 && retry && cloudSession?.refresh_token){
+    await refreshCloudSession(cloudSession.refresh_token);
+    return restFetch(path,options,false);
+  }
+  let data=null;
+  if(res.status!==204){try{data=await res.json();}catch{}}
+  if(!res.ok){
+    const msg=data?.message || data?.hint || data?.details || data?.error || `Supabase data error (${res.status})`;
+    throw new Error(msg);
+  }
+  return data;
+}
+async function initCloud(){
+  const status = $("cloudStatus");
+  try{
+    cloudSession=await ensureCloudSession();
+    currentUser=cloudSession?.user || null;
+    if(!currentUser) throw new Error("Could not create a private app session.");
+    cloudReady=true;
+    status.className="status ok";
+    status.textContent="✓ Cloud saving is connected. Your queue and label library will persist.";
+    await loadCloudData();
+    updateAccountUI();
+  }catch(err){
+    console.error("Supabase startup error:",err);
+    cloudReady=false;
+    status.className="status error";
+    status.textContent="Cloud saving couldn't connect: "+(err?.message||"unknown error")+". The app will still work for this session.";
+  }
+}
+async function loadCloudData(){
+  if(!cloudReady) return;
+  const [qData,lData]=await Promise.all([
+    restFetch("print_queue?select=*&printed_at=is.null&order=created_at.asc"),
+    restFetch("labels?select=*&order=created_at.desc")
+  ]);
+  queue=(qData||[]).map(x=>({
+    id:x.id,label_id:x.label_id,english:x.english,spanish:x.spanish,
+    photo:x.photo_data||"",size:x.size,created_at:x.created_at
+  }));
+  library=(lData||[]).map(x=>({
+    id:x.id,english:x.english,spanish:x.spanish,photo:x.photo_data||"",created_at:x.created_at
+  }));
+  refreshQueue();
+  refreshLibrary();
+}
+async function prepareCloudPhoto(dataUrl){
+  if(!dataUrl) return "";
+  try{
+    const img=new Image();
+    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=dataUrl;});
+    const maxSide=900;
+    const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+    const w=Math.max(1,Math.round(img.naturalWidth*scale));
+    const h=Math.max(1,Math.round(img.naturalHeight*scale));
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    const ctx=c.getContext("2d");
+    ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,w,h);
+    ctx.drawImage(img,0,0,w,h);
+    return c.toDataURL("image/jpeg",0.86);
+  }catch(err){
+    console.warn("Could not optimize cloud photo:",err);
+    return dataUrl;
+  }
+}
+async function getBackgroundRemover(){
+  if(backgroundRemover) return backgroundRemover;
+  try{
+    const mod = await import("https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.6/+esm");
+    backgroundRemover = mod.default || mod.removeBackground || mod;
+    return backgroundRemover;
+  }catch(err){
+    console.error("Could not load background-removal library:", err);
+    return null;
+  }
+}
+
+const sections = ["home","capture","confirm","preview","sets","makeList","batch","batchReview","queue","library","reprint","account","passwordRecovery","printPreview"];
+const $ = (id) => document.getElementById(id);
+let photoDataUrl = "";
+let rawRemovedPhotoDataUrl = "";
+let cleanedPhotoDataUrl = "";
+let activePhotoDataUrl = "";
+let cleanupMode = "normal";
+let identification = null;
+let cleanupSucceeded = false;
+let selectedSet = "matching";
+let queue = [];
+let library = [];
+let translationTimer = null;
+let translationRequestId = 0;
+let lastAutoTranslatedEnglish = "";
+let selectedLibraryLabel = null;
+let selectedReprintSet = "matching";
+let batchDrafts = [];
+let batchMode = "list";
+const batchTranslationTimers = new Map();
+const batchTranslationRequestIds = new Map();
+let printBatchIds = [];
+let printLayoutPages = [];
+
+
+
+function show(id){
+  sections.forEach(s => $(s).classList.toggle("hidden", s !== id));
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+function dataUrlFromFile(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+async function compressImage(file){
+  const raw = await dataUrlFromFile(file);
+  const img = new Image();
+  await new Promise((resolve,reject)=>{ img.onload=resolve; img.onerror=reject; img.src=raw; });
+  const maxSide = 1400;
+  let w = img.naturalWidth, h = img.naturalHeight;
+  const scale = Math.min(1, maxSide / Math.max(w,h));
+  w = Math.max(1, Math.round(w*scale)); h = Math.max(1, Math.round(h*scale));
+  const canvas = document.createElement("canvas");
+  canvas.width=w; canvas.height=h;
+  canvas.getContext("2d").drawImage(img,0,0,w,h);
+  return canvas.toDataURL("image/jpeg",0.82);
+}
+function setStatus(text, cls){
+  const el=$("identifyStatus");
+  el.textContent=text;
+  el.className="status " + cls;
+  el.classList.remove("hidden");
+}
+async function handlePhoto(file){
+  if(!file) return;
+  try{
+    $("retryIdentify").classList.add("hidden");
+    setStatus("Preparing photo…","loading");
+    photoDataUrl = await compressImage(file);
+    $("capturedPreview").src=photoDataUrl;
+    $("capturedPreview").classList.remove("hidden");
+    await identify();
+  }catch(err){
+    console.error(err);
+    setStatus("I couldn't prepare that photo. Please try another picture.","error");
+  }
+}
+function blobToDataUrl(blob){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+async function refineRemovedBackground(dataUrl, mode="normal"){
+  const img = new Image();
+  await new Promise((resolve,reject)=>{
+    img.onload=resolve;
+    img.onerror=reject;
+    img.src=dataUrl;
+  });
+
+  const canvas=document.createElement("canvas");
+  canvas.width=img.naturalWidth;
+  canvas.height=img.naturalHeight;
+  const ctx=canvas.getContext("2d",{willReadFrequently:true});
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0);
+
+  const imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const d=imageData.data;
+
+  // Normal removes faint mask debris.
+  // Strong removes more low-confidence leftovers around pale objects/backgrounds.
+  const alphaCut = mode==="strong" ? 155 : 70;
+  const featherEnd = mode==="strong" ? 225 : 150;
+  const paleThreshold = mode==="strong" ? 236 : 248;
+
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i], g=d[i+1], b=d[i+2], a=d[i+3];
+
+    if(a<=alphaCut){
+      d[i+3]=0;
+      continue;
+    }
+
+    if(a<featherEnd){
+      d[i+3]=Math.max(0,Math.min(255,
+        Math.round(255*(a-alphaCut)/(featherEnd-alphaCut))
+      ));
+    }
+
+    // Remove nearly-neutral pale fragments left by the segmentation mask.
+    const maxC=Math.max(r,g,b), minC=Math.min(r,g,b);
+    if(r>=paleThreshold && g>=paleThreshold && b>=paleThreshold && (maxC-minC)<14){
+      d[i+3]=0;
+    }
+  }
+
+  ctx.putImageData(imageData,0,0);
+
+  // Find remaining object bounds for a tighter crop.
+  const refined=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+  let minX=canvas.width, minY=canvas.height, maxX=-1, maxY=-1;
+
+  for(let y=0;y<canvas.height;y++){
+    for(let x=0;x<canvas.width;x++){
+      const a=refined[(y*canvas.width+x)*4+3];
+      if(a>20){
+        minX=Math.min(minX,x);
+        minY=Math.min(minY,y);
+        maxX=Math.max(maxX,x);
+        maxY=Math.max(maxY,y);
+      }
+    }
+  }
+
+  if(maxX<0) return dataUrl;
+
+  const objectW=maxX-minX+1;
+  const objectH=maxY-minY+1;
+  const pad=Math.round(Math.max(objectW,objectH)*0.08);
+
+  minX=Math.max(0,minX-pad);
+  minY=Math.max(0,minY-pad);
+  maxX=Math.min(canvas.width-1,maxX+pad);
+  maxY=Math.min(canvas.height-1,maxY+pad);
+
+  const w=maxX-minX+1;
+  const h=maxY-minY+1;
+
+  const out=document.createElement("canvas");
+  out.width=w;
+  out.height=h;
+  const octx=out.getContext("2d");
+
+  // Put the approved result on a true solid-white label background.
+  octx.fillStyle="#ffffff";
+  octx.fillRect(0,0,w,h);
+  octx.drawImage(canvas,minX,minY,w,h,0,0,w,h);
+
+  return out.toDataURL("image/png");
+}
+
+async function applyCleanupMode(mode){
+  if(!rawRemovedPhotoDataUrl) return;
+
+  cleanupMode=mode;
+  setCleanupStatus(`Refining ${mode} cleanup…`,"loading");
+
+  try{
+    cleanedPhotoDataUrl=await refineRemovedBackground(rawRemovedPhotoDataUrl,mode);
+    activePhotoDataUrl=cleanedPhotoDataUrl;
+    $("confirmPhoto").src=cleanedPhotoDataUrl;
+
+    $("normalCleanupBtn").className=mode==="normal" ? "primary" : "secondary";
+    $("strongCleanupBtn").className=mode==="strong" ? "primary" : "secondary";
+    $("useCleanedBtn").className="primary";
+    $("useOriginalBtn").className="secondary";
+
+    syncLabel();
+    setCleanupStatus("Background cleanup preview — choose Normal or Strong, then approve the version you like.","ok");
+  }catch(err){
+    console.error("Cleanup refinement error:",err);
+    setCleanupStatus("I couldn't refine that cleanup. You can still use the original photo.","error");
+  }
+}
+
+function setCleanupStatus(text, cls){
+  const el=$("cleanupStatus");
+  el.textContent=text;
+  el.className="status " + cls;
+  el.classList.remove("hidden");
+}
+async function cleanBackground(){
+  if(!photoDataUrl) return false;
+  cleanupSucceeded=false;
+  $("photoChoiceRow").classList.add("hidden");
+  $("retryCleanupBtn").classList.add("hidden");
+  setCleanupStatus("✨ Removing the background… The first time on this phone may take a little longer.","loading");
+  try{
+    const removeBackground = await getBackgroundRemover();
+    if(!removeBackground){
+      throw new Error("Background-removal library could not load on this device.");
+    }
+    const blob = await removeBackground(photoDataUrl,{
+      model:"small",
+      device:"cpu",
+      output:{format:"image/png",quality:1},
+      progress:(key,current,total)=>{
+        if(total>0){
+          const pct=Math.max(1,Math.min(100,Math.round((current/total)*100)));
+          if(String(key).startsWith("fetch:")){
+            setCleanupStatus(`✨ Loading background cleaner… ${pct}%`,"loading");
+          }else if(String(key).startsWith("compute:")){
+            setCleanupStatus(`✨ Cleaning background… ${pct}%`,"loading");
+          }
+        }
+      }
+    });
+    rawRemovedPhotoDataUrl = await blobToDataUrl(blob);
+    cleanupSucceeded=true;
+    $("cleanupStrengthWrap").classList.remove("hidden");
+    $("photoChoiceRow").classList.remove("hidden");
+    await applyCleanupMode("normal");
+    return true;
+  }catch(err){
+    console.error("Background cleanup error:",err);
+    rawRemovedPhotoDataUrl="";
+    cleanedPhotoDataUrl="";
+    activePhotoDataUrl=photoDataUrl;
+    cleanupMode="normal";
+    cleanupSucceeded=false;
+    $("cleanupStrengthWrap").classList.add("hidden");
+    $("confirmPhoto").src=activePhotoDataUrl;
+    $("photoChoiceRow").classList.add("hidden");
+    $("retryCleanupBtn").classList.remove("hidden");
+    setCleanupStatus("Background cleanup isn't available right now, so I'm using the original photo. Everything else still works normally.","error");
+    syncLabel();
+    return false;
+  }
+}
+async function identify(){
+  if(!photoDataUrl) return;
+  setStatus("✨ Identifying the classroom material…","loading");
+  $("retryIdentify").classList.add("hidden");
+  try{
+    const response = await fetch(FUNCTION_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({imageDataUrl:photoDataUrl})
+    });
+    let data;
+    try{ data=await response.json(); }catch{ data={}; }
+    if(!response.ok || !data.success || !data.identification){
+      throw new Error(data.details || data.error || `Request failed (${response.status})`);
+    }
+    identification=data.identification;
+    setStatus("✓ Identified!","ok");
+    activePhotoDataUrl=photoDataUrl;
+    populateConfirm();
+    show("confirm");
+    await cleanBackground();
+  }catch(err){
+    console.error("Identification error:",err);
+    setStatus("Identification didn't work: " + err.message,"error");
+    $("retryIdentify").classList.remove("hidden");
+  }
+}
+function populateConfirm(){
+  $("confirmPhoto").src=activePhotoDataUrl || photoDataUrl;
+  $("foundEnglish").textContent=identification.english || "";
+  $("foundSpanish").textContent=identification.spanish || "";
+  $("foundCategory").textContent=identification.category ? "Category: "+identification.category : "";
+  $("foundConfidence").textContent=identification.confidence ? "Confidence: "+identification.confidence : "";
+  $("foundNotes").textContent=identification.notes || "";
+  $("englishInput").value=identification.english || "";
+  $("spanishInput").value=identification.spanish || "";
+  lastAutoTranslatedEnglish=$("englishInput").value.trim();
+  $("translationStatus").textContent="";
+  syncLabel();
+}
+async function autoTranslateEnglish(){
+  const english = $("englishInput").value.trim();
+  const status = $("translationStatus");
+
+  if(!english){
+    status.textContent="";
+    return;
+  }
+
+  if(english === lastAutoTranslatedEnglish){
+    return;
+  }
+
+  const requestId = ++translationRequestId;
+  status.textContent="Translating Spanish…";
+
+  try{
+    const response = await fetch(TRANSLATE_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({english})
+    });
+
+    let data={};
+    try{ data=await response.json(); }catch{}
+
+    if(requestId !== translationRequestId) return;
+
+    if(!response.ok || !data.success || !data.spanish){
+      throw new Error(data.error || data.details || `Request failed (${response.status})`);
+    }
+
+    $("spanishInput").value=data.spanish;
+    lastAutoTranslatedEnglish=english;
+    syncLabel();
+    status.textContent="✓ Spanish updated automatically";
+  }catch(err){
+    console.error("Auto-translation error:",err);
+    if(requestId === translationRequestId){
+      status.textContent="Spanish could not update automatically. You can still edit it manually.";
+    }
+  }
+}
+
+function scheduleAutoTranslation(){
+  clearTimeout(translationTimer);
+  $("translationStatus").textContent="Waiting for you to finish typing…";
+  translationTimer=setTimeout(autoTranslateEnglish,900);
+}
+
+function syncLabel(){
+  $("labelEnglish").textContent=$("englishInput").value || "Material";
+  $("labelSpanish").textContent=$("spanishInput").value || "material";
+  $("labelPhoto").src=activePhotoDataUrl || photoDataUrl;
+  $("photoModeNote").textContent = (activePhotoDataUrl && activePhotoDataUrl===cleanedPhotoDataUrl)
+    ? `Using ${cleanupMode} cleanup on a true white background.`
+    : "Using the original photo.";
+}
+function updateSetSummary(){
+  let txt="";
+  if(selectedSet==="matching") txt="<strong>Creating 2 labels</strong><br>2 × Business Card — 3.375 × 2 in";
+  if(selectedSet==="different") txt="<strong>Creating 2 labels</strong><br>1 × Business Card — 3.375 × 2 in<br>1 × CP Basket — 3 × 2.5 in";
+  if(selectedSet==="single") txt="<strong>Creating 1 label</strong><br>"+$("singleSize").value;
+  $("setSummary").innerHTML=txt;
+}
+async function addQueue(){
+  const btn=$("addToQueue");
+  const originalText=btn.textContent;
+  btn.disabled=true;
+  btn.textContent="Saving…";
+  try{
+    const english=$("englishInput").value.trim() || "Material";
+    const spanish=$("spanishInput").value.trim() || "material";
+    const storedPhoto=await prepareCloudPhoto(activePhotoDataUrl || photoDataUrl);
+    const sizes = selectedSet==="matching"
+      ? ["Business Card · 3.375 × 2 in","Business Card · 3.375 × 2 in"]
+      : selectedSet==="different"
+        ? ["Business Card · 3.375 × 2 in","CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)"]
+        : [$("singleSize").value];
+
+    if(cloudReady){
+      let label=library.find(x=>x.english.toLowerCase()===english.toLowerCase() && x.spanish.toLowerCase()===spanish.toLowerCase());
+      if(!label){
+        const savedRows=await restFetch("labels",{
+          method:"POST",
+          headers:{"Prefer":"return=representation"},
+          body:JSON.stringify({english,spanish,photo_data:storedPhoto})
+        });
+        const saved=savedRows?.[0];
+        if(!saved) throw new Error("Supabase did not return the saved label.");
+        label={id:saved.id,english:saved.english,spanish:saved.spanish,photo:saved.photo_data||""};
+      }
+      const rows=sizes.map(size=>({
+        label_id:label.id,english,spanish,photo_data:storedPhoto,size
+      }));
+      await restFetch("print_queue",{
+        method:"POST",
+        headers:{"Prefer":"return=representation"},
+        body:JSON.stringify(rows)
+      });
+      await loadCloudData();
+    }else{
+      const itemBase={english,spanish,photo:storedPhoto};
+      sizes.forEach(size=>queue.push({...itemBase,size,id:crypto.randomUUID()}));
+      if(!library.some(x=>x.english===english && x.spanish===spanish)) library.push(itemBase);
+      refreshQueue(); refreshLibrary();
+    }
+    show("queue");
+  }catch(err){
+    console.error("Save queue error:",err);
+    alert("I couldn't save this label to the persistent queue. Please try again.");
+  }finally{
+    btn.disabled=false;
+    btn.textContent=originalText;
+  }
+}
+async function markPrinted(id){
+  try{
+    if(cloudReady){
+      await restFetch(`print_queue?id=eq.${encodeURIComponent(id)}`,{
+        method:"PATCH",
+        headers:{"Prefer":"return=minimal"},
+        body:JSON.stringify({printed_at:new Date().toISOString()})
+      });
+      await loadCloudData();
+    }else{
+      queue=queue.filter(x=>x.id!==id); refreshQueue();
+    }
+  }catch(err){
+    console.error(err); alert("I couldn't mark that label printed. Please try again.");
+  }
+}
+async function removeQueueItem(id){
+  try{
+    if(cloudReady){
+      await restFetch(`print_queue?id=eq.${encodeURIComponent(id)}`,{
+        method:"DELETE",
+        headers:{"Prefer":"return=minimal"}
+      });
+      await loadCloudData();
+    }else{
+      queue=queue.filter(x=>x.id!==id); refreshQueue();
+    }
+  }catch(err){
+    console.error(err); alert("I couldn't remove that queue item. Please try again.");
+  }
+}
+
+function escapePrintHtml(value){
+  return String(value??"")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;");
+}
+
+function labelDimensions(item){
+  const isCP=String(item.size||"").toLowerCase().includes("cp basket");
+  return isCP
+    ? {w:4.5,h:3,type:"cp"}
+    : {w:3.375,h:2,type:"business"};
+}
+
+function buildPrintLayout(items){
+  const PAGE_W=8.5, PAGE_H=11;
+  const MARGIN=.25, GAP=.08;
+  const usableW=PAGE_W-(MARGIN*2);
+  const usableH=PAGE_H-(MARGIN*2);
+
+  // Taller labels first gives cleaner, more efficient mixed-size sheets.
+  const pending=items.map((item,index)=>{
+    const d=labelDimensions(item);
+    return {...item,_w:d.w,_h:d.h,_type:d.type,_order:index};
+  }).sort((a,b)=>(b._h-a._h)||(b._w-a._w)||(a._order-b._order));
+
+  const pages=[];
+  let page=[];
+  let x=MARGIN, y=MARGIN, rowH=0;
+
+  const finishPage=()=>{
+    if(page.length) pages.push(page);
+    page=[]; x=MARGIN; y=MARGIN; rowH=0;
+  };
+
+  for(const item of pending){
+    // New row if item won't fit horizontally.
+    if(x + item._w > PAGE_W-MARGIN + 0.0001){
+      x=MARGIN;
+      y += rowH + GAP;
+      rowH=0;
+    }
+
+    // New page if item won't fit vertically.
+    if(y + item._h > PAGE_H-MARGIN + 0.0001){
+      finishPage();
+    }
+
+    page.push({...item,x,y});
+    x += item._w + GAP;
+    rowH=Math.max(rowH,item._h);
+  }
+  finishPage();
+  return pages;
+}
+
+
+function printableLabelBackgroundSvg(){
+  // Actual SVG artwork so Android print services cannot discard it as a CSS "background graphic".
+  return `<svg class="label-art-bg" viewBox="0 0 350 200" preserveAspectRatio="none" aria-hidden="true">
+    <defs>
+      <linearGradient id="eeaWash" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#e8f3fb"/>
+        <stop offset="48%" stop-color="#f8fbfe"/>
+        <stop offset="100%" stop-color="#deedf8"/>
+      </linearGradient>
+      <filter id="eeaShadow" x="-20%" y="-20%" width="140%" height="150%">
+        <feDropShadow dx="0" dy="4" stdDeviation="3.5" flood-color="#315b79" flood-opacity=".18"/>
+      </filter>
+    </defs>
+    <rect x="0" y="0" width="350" height="200" fill="url(#eeaWash)"/>
+    <rect x="12" y="10" width="326" height="176" rx="15" fill="#ffffff"
+          stroke="#83b6db" stroke-width="2.1" filter="url(#eeaShadow)"/>
+    <path d="M18 16 C72 7,128 17,178 11 S282 17,332 12" fill="none"
+          stroke="#a9cce6" stroke-width="1.2" opacity=".52"/>
+    <path d="M18 180 C76 188,132 177,184 184 S280 177,332 183" fill="none"
+          stroke="#a9cce6" stroke-width="1.2" opacity=".52"/>
+  </svg>`;
+}
+
+function printLabelInnerHtml(item,preview=false){
+  const photo=item.photo
+    ? `<img src="${item.photo}" alt="">`
+    : "";
+  if(preview){
+    return `${printableLabelBackgroundSvg()}<div class="sheet-page-inner">
+      <div class="sheet-page-image">${photo}</div>
+      <div class="sheet-page-text">
+        <div class="sheet-page-en">${escapePrintHtml(item.english)}</div>
+        <div class="sheet-page-es">${escapePrintHtml(item.spanish)}</div>
+      </div>
+    </div>`;
+  }
+  return `${printableLabelBackgroundSvg()}<div class="print-label-inner">
+    <div class="print-label-image">${photo}</div>
+    <div class="print-label-text">
+      <div class="print-label-en">${escapePrintHtml(item.english)}</div>
+      <div class="print-label-es">${escapePrintHtml(item.spanish)}</div>
+    </div>
+  </div>`;
+}
+
+
+function roundRectPath(ctx,x,y,w,h,r){
+  const rr=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+rr,y);
+  ctx.arcTo(x+w,y,x+w,y+h,rr);
+  ctx.arcTo(x+w,y+h,x,y+h,rr);
+  ctx.arcTo(x,y+h,x,y,rr);
+  ctx.arcTo(x,y,x+w,y,rr);
+  ctx.closePath();
+}
+
+function wrapTextLines(ctx,text,maxWidth,maxLines=2){
+  const words=String(text||"").trim().split(/\s+/).filter(Boolean);
+  if(!words.length) return [""];
+  const lines=[];
+  let current="";
+  for(const word of words){
+    const test=current ? current+" "+word : word;
+    if(ctx.measureText(test).width<=maxWidth || !current){
+      current=test;
+    }else{
+      lines.push(current);
+      current=word;
+      if(lines.length===maxLines-1) break;
+    }
+  }
+  if(current && lines.length<maxLines) lines.push(current);
+
+  // If there are unconsumed words, fit remaining text into final line.
+  const consumed=lines.join(" ").split(/\s+/).filter(Boolean).length;
+  if(consumed<words.length && lines.length){
+    let final=lines[lines.length-1];
+    const remaining=words.slice(consumed).join(" ");
+    const candidate=(final+" "+remaining).trim();
+    if(ctx.measureText(candidate).width<=maxWidth){
+      lines[lines.length-1]=candidate;
+    }
+  }
+  return lines;
+}
+
+async function loadImageForRaster(src){
+  if(!src) return null;
+  const img=new Image();
+  img.decoding="async";
+  await new Promise((resolve,reject)=>{
+    img.onload=resolve;
+    img.onerror=reject;
+    img.src=src;
+  });
+  return img;
+}
+
+async function rasterizeFinishedLabel(item){
+  const d=labelDimensions(item);
+  const DPI=300;
+  const W=Math.round(d.w*DPI);
+  const H=Math.round(d.h*DPI);
+  const canvas=document.createElement("canvas");
+  canvas.width=W; canvas.height=H;
+  const ctx=canvas.getContext("2d");
+
+  // CP BASKET: full printed piece is 3 x 5 in.
+  // Top 3 x 2.5 in stays blank as the fold-in flap.
+  // Bottom 3 x 2.5 in is the visible designed label.
+  if(d.type==="cp"){
+    ctx.fillStyle="#ffffff";
+    ctx.fillRect(0,0,W,H);
+
+    // Full CP Basket card: 4.5" wide x 3" tall.
+    // Top 4.5" x 1.5" is the blank fold-behind flap.
+    // Bottom 4.5" x 1.5" is the visible label.
+    const foldY=Math.round(H/2);
+
+    // Fold guide at exactly 1.5 inches from the top.
+    ctx.save();
+    ctx.strokeStyle="#9aa9b5";
+    ctx.lineWidth=2;
+    ctx.setLineDash([10,8]);
+    ctx.beginPath();
+    ctx.moveTo(0,foldY);
+    ctx.lineTo(W,foldY);
+    ctx.stroke();
+    ctx.restore();
+
+    const visibleY=foldY;
+    const visibleH=H-foldY;
+
+    // Soft Early Eagle field on visible half only.
+    const bg=ctx.createLinearGradient(0,visibleY,W,H);
+    bg.addColorStop(0,"#e6f2fb");
+    bg.addColorStop(.50,"#f7fbfe");
+    bg.addColorStop(1,"#dcecf8");
+    ctx.fillStyle=bg;
+    ctx.fillRect(0,visibleY,W,visibleH);
+
+    const inset=Math.round(DPI*.035);
+    const cardX=inset;
+    const cardY=visibleY+inset;
+    const cardW=W-inset*2;
+    const cardH=visibleH-inset*2;
+    const radius=Math.round(DPI*.075);
+
+    ctx.save();
+    ctx.shadowColor="rgba(48,88,118,.16)";
+    ctx.shadowBlur=Math.round(DPI*.022);
+    ctx.shadowOffsetY=Math.round(DPI*.010);
+    roundRectPath(ctx,cardX,cardY,cardW,cardH,radius);
+    ctx.fillStyle="#ffffff";
+    ctx.fill();
+    ctx.restore();
+
+    roundRectPath(ctx,cardX,cardY,cardW,cardH,radius);
+    ctx.strokeStyle="#7fb3d8";
+    ctx.lineWidth=Math.max(4,Math.round(DPI*.013));
+    ctx.stroke();
+
+    // Wide shallow visible panel: large image left, bilingual wording right.
+    const pad=Math.round(DPI*.045);
+    const contentX=cardX+pad;
+    const contentY=cardY+pad;
+    const contentW=cardW-pad*2;
+    const contentH=cardH-pad*2;
+
+    const imageW=Math.round(contentW*.40);
+    const dividerX=contentX+imageW+Math.round(DPI*.025);
+    const textX=dividerX+Math.round(DPI*.065);
+    const textW=(contentX+contentW)-textX;
+
+    try{
+      const img=await loadImageForRaster(item.photo);
+      if(img){
+        const maxW=imageW*.96;
+        const maxH=contentH*.94;
+        const scale=Math.min(maxW/img.naturalWidth,maxH/img.naturalHeight);
+        const iw=img.naturalWidth*scale;
+        const ih=img.naturalHeight*scale;
+        ctx.drawImage(img,contentX+(imageW-iw)/2,contentY+(contentH-ih)/2,iw,ih);
+      }
+    }catch(err){
+      console.warn("Could not rasterize CP label photo:",err);
+    }
+
+    ctx.strokeStyle="#5c9dcd";
+    ctx.lineWidth=Math.max(3,Math.round(DPI*.011));
+    ctx.beginPath();
+    ctx.moveTo(dividerX,contentY+contentH*.08);
+    ctx.lineTo(dividerX,contentY+contentH*.92);
+    ctx.stroke();
+
+    ctx.textAlign="center";
+    ctx.textBaseline="middle";
+    const centerX=textX+textW/2;
+
+    let enSize=78;
+    ctx.font=`800 ${enSize}px Arial, sans-serif`;
+    while(ctx.measureText(item.english||"").width>textW*.97 && enSize>50){
+      enSize--;
+      ctx.font=`800 ${enSize}px Arial, sans-serif`;
+    }
+    const enLines=wrapTextLines(ctx,item.english||"",textW*.96,2);
+
+    let esSize=56;
+    ctx.font=`700 ${esSize}px Arial, sans-serif`;
+    while(ctx.measureText(item.spanish||"").width>textW*.97 && esSize>36){
+      esSize--;
+      ctx.font=`700 ${esSize}px Arial, sans-serif`;
+    }
+    const esLines=wrapTextLines(ctx,item.spanish||"",textW*.96,2);
+
+    const enH=enSize*1.02;
+    const esH=esSize*1.02;
+    const gap=Math.round(DPI*.006);
+    const totalH=enLines.length*enH+esLines.length*esH+gap;
+    let ty=contentY+(contentH-totalH)/2+enH/2;
+
+    ctx.fillStyle="#0e4c88";
+    ctx.font=`800 ${enSize}px Arial, sans-serif`;
+    for(const line of enLines){
+      ctx.fillText(line,centerX,ty);
+      ty+=enH;
+    }
+
+    ty+=gap;
+    ctx.fillStyle="#171717";
+    ctx.font=`700 ${esSize}px Arial, sans-serif`;
+    for(const line of esLines){
+      ctx.fillText(line,centerX,ty);
+      ty+=esH;
+    }
+
+    return canvas.toDataURL("image/png");
+  }
+
+  // BUSINESS CARD: locked Build 19 visual treatment.
+  const bg=ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,"#e6f2fb");
+  bg.addColorStop(.48,"#f7fbfe");
+  bg.addColorStop(1,"#dcecf8");
+  ctx.fillStyle=bg;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.save();
+  ctx.globalAlpha=.18;
+  ctx.fillStyle="#b9d9ee";
+  ctx.beginPath(); ctx.ellipse(W*.08,H*.18,W*.17,H*.22,-.25,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(W*.92,H*.82,W*.20,H*.25,.2,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  const inset=Math.round(DPI*.028);
+  const cardX=inset, cardY=inset*.55, cardW=W-inset*2, cardH=H-inset*1.10;
+  const radius=Math.round(DPI*.085);
+
+  ctx.save();
+  ctx.shadowColor="rgba(48,88,118,.20)";
+  ctx.shadowBlur=Math.round(DPI*.03);
+  ctx.shadowOffsetY=Math.round(DPI*.015);
+  roundRectPath(ctx,cardX,cardY,cardW,cardH,radius);
+  ctx.fillStyle="#ffffff";
+  ctx.fill();
+  ctx.restore();
+
+  roundRectPath(ctx,cardX,cardY,cardW,cardH,radius);
+  ctx.strokeStyle="#7fb3d8";
+  ctx.lineWidth=Math.max(4,Math.round(DPI*.014));
+  ctx.stroke();
+
+  ctx.save();
+  ctx.globalAlpha=.28;
+  roundRectPath(ctx,cardX+5,cardY+4,cardW-10,cardH-8,radius-4);
+  ctx.strokeStyle="#b7d5e9";
+  ctx.lineWidth=Math.max(2,Math.round(DPI*.009));
+  ctx.stroke();
+  ctx.restore();
+
+  const innerPad=Math.round(DPI*.035);
+  const contentX=cardX+innerPad;
+  const contentW=cardW-innerPad*2;
+  const textBlockH=Math.round(H*.30);
+  const dividerY=cardY+cardH-textBlockH;
+  const imageTop=cardY+Math.round(DPI*.012);
+  const imageBottom=dividerY-Math.round(DPI*.012);
+  const imageAreaH=imageBottom-imageTop;
+
+  try{
+    const img=await loadImageForRaster(item.photo);
+    if(img){
+      const maxW=contentW*.99;
+      const maxH=imageAreaH*.99;
+      const scale=Math.min(maxW/img.naturalWidth,maxH/img.naturalHeight);
+      const iw=img.naturalWidth*scale;
+      const ih=img.naturalHeight*scale;
+      ctx.drawImage(img,contentX+(contentW-iw)/2,imageTop+(imageAreaH-ih)/2,iw,ih);
+    }
+  }catch(err){
+    console.warn("Could not rasterize label photo:",err);
+  }
+
+  ctx.strokeStyle="#5c9dcd";
+  ctx.lineWidth=Math.max(3,Math.round(DPI*.012));
+  ctx.beginPath();
+  ctx.moveTo(contentX,dividerY);
+  ctx.lineTo(contentX+contentW,dividerY);
+  ctx.stroke();
+
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+
+  let enSize=66;
+  ctx.font=`800 ${enSize}px Arial, sans-serif`;
+  while(ctx.measureText(item.english||"").width>contentW*.985 && enSize>40){
+    enSize--;
+    ctx.font=`800 ${enSize}px Arial, sans-serif`;
+  }
+  const enLines=wrapTextLines(ctx,item.english||"",contentW*.96,2);
+
+  let esSize=50;
+  ctx.font=`700 ${esSize}px Arial, sans-serif`;
+  while(ctx.measureText(item.spanish||"").width>contentW*.985 && esSize>31){
+    esSize--;
+    ctx.font=`700 ${esSize}px Arial, sans-serif`;
+  }
+  const esLines=wrapTextLines(ctx,item.spanish||"",contentW*.96,2);
+
+  const lineGap=Math.round(DPI*.008);
+  const enLineH=enSize*1.03;
+  const esLineH=esSize*1.03;
+  const totalH=enLines.length*enLineH+esLines.length*esLineH+lineGap*2;
+  let ty=dividerY+(textBlockH-totalH)/2+enLineH/2;
+
+  ctx.fillStyle="#0e4c88";
+  ctx.font=`800 ${enSize}px Arial, sans-serif`;
+  for(const line of enLines){
+    ctx.fillText(line,W/2,ty);
+    ty+=enLineH;
+  }
+
+  ty+=lineGap;
+  ctx.fillStyle="#171717";
+  ctx.font=`700 ${esSize}px Arial, sans-serif`;
+  for(const line of esLines){
+    ctx.fillText(line,W/2,ty);
+    ty+=esLineH;
+  }
+
+  return canvas.toDataURL("image/png");
+}
+async function buildRasterPrintPages(){
+  const pages=[];
+  for(const page of printLayoutPages){
+    const rasterItems=[];
+    for(const item of page){
+      rasterItems.push({...item,_raster:await rasterizeFinishedLabel(item)});
+    }
+    pages.push(rasterItems);
+  }
+  return pages;
+}
+
+async function renderPrintSheets(){
+  const showCuts=$("cutLinesToggle").checked;
+  const preview=$("sheetPreviewPages");
+  const printRoot=$("printRoot");
+  preview.innerHTML='<div class="status loading">Rendering your finished labels…</div>';
+  printRoot.innerHTML="";
+
+  const rasterPages=await buildRasterPrintPages();
+  preview.innerHTML="";
+
+  rasterPages.forEach((page)=>{
+    const previewPage=document.createElement("div");
+    previewPage.className="sheet-preview";
+
+    const printPage=document.createElement("div");
+    printPage.className="print-page";
+
+    page.forEach(item=>{
+      const p=document.createElement("div");
+      p.className="raster-sheet-label"+(showCuts?" cut-lines":"");
+      p.style.left=`${(item.x/8.5)*100}%`;
+      p.style.top=`${(item.y/11)*100}%`;
+      p.style.width=`${(item._w/8.5)*100}%`;
+      p.style.height=`${(item._h/11)*100}%`;
+      p.innerHTML=`<img src="${item._raster}" alt="">`;
+      previewPage.appendChild(p);
+
+      const exact=document.createElement("div");
+      exact.className="raster-print-label"+(showCuts?" cut-lines":"");
+      exact.style.left=`${item.x}in`;
+      exact.style.top=`${item.y}in`;
+      exact.style.width=`${item._w}in`;
+      exact.style.height=`${item._h}in`;
+      exact.innerHTML=`<img src="${item._raster}" alt="">`;
+      printPage.appendChild(exact);
+    });
+
+    preview.appendChild(previewPage);
+    printRoot.appendChild(printPage);
+  });
+
+  const count=printBatchIds.length;
+  $("printSheetSummary").textContent=
+    `${count} label${count===1?"":"s"} arranged on ${printLayoutPages.length} letter-size sheet${printLayoutPages.length===1?"":"s"} at true size.`;
+}
+async function createPrintSheets(){
+  if(!queue.length){
+    alert("There aren't any labels in Ready to Print.");
+    return;
+  }
+  printBatchIds=queue.map(x=>x.id);
+  printLayoutPages=buildPrintLayout(queue);
+  show("printPreview");
+  await renderPrintSheets();
+}
+
+function printCurrentSheets(){
+  if(!printLayoutPages.length){
+    alert("Create the print sheets first.");
+    return;
+  }
+  window.print();
+}
+
+async function markCurrentSheetPrinted(){
+  if(!printBatchIds.length) return;
+  if(!confirm(`Mark all ${printBatchIds.length} label${printBatchIds.length===1?"":"s"} from this print batch as printed?`)) return;
+
+  const btn=$("markSheetPrintedBtn");
+  btn.disabled=true;
+  btn.textContent="Updating queue…";
+
+  try{
+    if(cloudReady){
+      for(const id of printBatchIds){
+        await restFetch(`print_queue?id=eq.${encodeURIComponent(id)}`,{
+          method:"PATCH",
+          headers:{"Prefer":"return=minimal"},
+          body:JSON.stringify({printed_at:new Date().toISOString()})
+        });
+      }
+      await loadCloudData();
+    }else{
+      const ids=new Set(printBatchIds);
+      queue=queue.filter(x=>!ids.has(x.id));
+      refreshQueue();
+    }
+    printBatchIds=[];
+    printLayoutPages=[];
+    show("queue");
+  }catch(err){
+    console.error(err);
+    alert("I couldn't mark the print batch as printed. Your queue has been left intact.");
+  }finally{
+    btn.disabled=false;
+    btn.textContent="✓ Mark These Labels Printed";
+  }
+}
+
+function refreshQueue(){
+  const count=queue.length;
+  $("queueCount").textContent=`(${count})`;
+  $("queueSummary").textContent=count ? `${count} label${count===1?"":"s"} waiting — they will stay here until you mark them printed.` : "Nothing queued yet.";
+  $("mockSheets").classList.toggle("hidden",count===0);
+  $("nextMaterialBtn").classList.toggle("hidden",count===0);
+  const wrap=$("queueItems"); wrap.innerHTML="";
+  queue.forEach(item=>{
+    const d=document.createElement("div"); d.className="queue-item";
+    const left=document.createElement("div");
+    const name=document.createElement("strong"); name.textContent=item.english;
+    const spanish=document.createElement("div"); spanish.style.marginTop="2px"; spanish.textContent=item.spanish;
+    const size=document.createElement("div"); size.className="tiny"; size.style.marginTop="3px"; size.textContent=item.size;
+    left.append(name,spanish,size);
+    const actions=document.createElement("div"); actions.className="queue-actions";
+    const printed=document.createElement("button"); printed.className="primary"; printed.textContent="✓ Printed";
+    printed.addEventListener("click",()=>markPrinted(item.id));
+    const remove=document.createElement("button"); remove.className="secondary danger"; remove.textContent="Remove";
+    remove.addEventListener("click",()=>removeQueueItem(item.id));
+    actions.append(printed,remove);
+    d.append(left,actions); wrap.appendChild(d);
+  });
+}
+
+async function deleteLibraryLabel(item){
+  if(!item) return;
+  const labelName=item.english || "this label";
+  if(!confirm(`Permanently delete "${labelName}" from My Labels?
+
+This removes the saved master label. Any copies already sitting in Ready to Print will stay there until you remove or print them.`)) return;
+
+  try{
+    if(cloudReady && item.id){
+      await restFetch(`labels?id=eq.${encodeURIComponent(item.id)}`,{
+        method:"DELETE",
+        headers:{"Prefer":"return=representation"}
+      });
+      await loadCloudData();
+    }else{
+      library=library.filter(x=>x!==item && x.id!==item.id);
+      refreshLibrary();
+    }
+  }catch(err){
+    console.error("Delete saved label error:",err);
+    alert("I couldn't delete that saved label: "+err.message);
+  }
+}
+
+function refreshLibrary(){
+  const wrap=$("libraryItems");
+  wrap.innerHTML="";
+  const query=($("librarySearch")?.value || "").trim().toLowerCase();
+  const filtered=library.filter(item=>{
+    if(!query) return true;
+    return (item.english||"").toLowerCase().includes(query) ||
+           (item.spanish||"").toLowerCase().includes(query);
+  });
+
+  if(!filtered.length){
+    wrap.innerHTML=library.length
+      ? '<p class="muted">No saved labels match that search.</p>'
+      : '<p class="muted">No approved labels saved yet.</p>';
+    return;
+  }
+
+  filtered.forEach(item=>{
+    const d=document.createElement("div");
+    d.className="queue-item";
+
+    const left=document.createElement("div");
+    left.style.display="flex";
+    left.style.alignItems="center";
+    left.style.gap="10px";
+    left.style.minWidth="0";
+
+    if(item.photo){
+      const img=document.createElement("img");
+      img.src=item.photo;
+      img.alt="";
+      img.style.width="58px";
+      img.style.height="58px";
+      img.style.objectFit="contain";
+      img.style.background="#fff";
+      img.style.border="1px solid var(--line)";
+      img.style.borderRadius="10px";
+      left.appendChild(img);
+    }
+
+    const words=document.createElement("div");
+    const e=document.createElement("strong");
+    e.textContent=item.english;
+    const sp=document.createElement("div");
+    sp.className="tiny";
+    sp.textContent=item.spanish;
+    words.append(e,sp);
+    left.appendChild(words);
+
+    const actions=document.createElement("div");
+    actions.className="queue-actions";
+
+    const button=document.createElement("button");
+    button.className="primary";
+    button.textContent="Reprint";
+    button.addEventListener("click",()=>openReprint(item));
+
+    const del=document.createElement("button");
+    del.className="secondary danger";
+    del.textContent="Delete";
+    del.addEventListener("click",()=>deleteLibraryLabel(item));
+
+    actions.append(button,del);
+    d.append(left,actions);
+    wrap.appendChild(d);
+  });
+}
+
+function openReprint(item){
+  selectedLibraryLabel=item;
+  selectedReprintSet="matching";
+  $("reprintPhoto").src=item.photo || "";
+  $("reprintEnglish").textContent=item.english || "";
+  $("reprintSpanish").textContent=item.spanish || "";
+  document.querySelectorAll(".reprint-choice").forEach(c=>{
+    c.classList.toggle("selected",c.dataset.reprintSet==="matching");
+  });
+  $("reprintSingleWrap").classList.add("hidden");
+  show("reprint");
+}
+
+async function addSavedLabelToQueue(){
+  if(!selectedLibraryLabel) return;
+  const btn=$("reprintQueueBtn");
+  const oldText=btn.textContent;
+  btn.disabled=true;
+  btn.textContent="Adding…";
+
+  try{
+    const sizes=selectedReprintSet==="matching"
+      ? ["Business Card · 3.375 × 2 in","Business Card · 3.375 × 2 in"]
+      : selectedReprintSet==="different"
+        ? ["Business Card · 3.375 × 2 in","CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)"]
+        : [$("reprintSingleSize").value];
+
+    if(cloudReady){
+      const rows=sizes.map(size=>({
+        label_id:selectedLibraryLabel.id,
+        english:selectedLibraryLabel.english,
+        spanish:selectedLibraryLabel.spanish,
+        photo_data:selectedLibraryLabel.photo || "",
+        size
+      }));
+      await restFetch("print_queue",{
+        method:"POST",
+        headers:{"Prefer":"return=representation"},
+        body:JSON.stringify(rows)
+      });
+      await loadCloudData();
+    }else{
+      sizes.forEach(size=>queue.push({
+        id:crypto.randomUUID(),
+        label_id:selectedLibraryLabel.id,
+        english:selectedLibraryLabel.english,
+        spanish:selectedLibraryLabel.spanish,
+        photo:selectedLibraryLabel.photo || "",
+        size
+      }));
+      refreshQueue();
+    }
+    show("queue");
+  }catch(err){
+    console.error("Reprint queue error:",err);
+    alert("I couldn't add that saved label to the print queue. Please try again.");
+  }finally{
+    btn.disabled=false;
+    btn.textContent=oldText;
+  }
+}
+
+
+function setBatchMode(mode){
+  batchMode=mode;
+  $("batchListPane").classList.toggle("hidden",mode!=="list");
+  $("batchLinkPane").classList.toggle("hidden",mode!=="link");
+  $("listTabBtn").className=mode==="list" ? "primary" : "secondary";
+  $("linkTabBtn").className=mode==="link" ? "primary" : "secondary";
+}
+
+function openDedicatedBatch(mode){
+  setBatchMode(mode);
+  $("batchTabRow").classList.add("hidden");
+  if(mode==="link"){
+    $("batchTitle").textContent="Product Link";
+    $("batchDescription").textContent="Paste a product page link and the app will create a label draft using the real product title and image when available.";
+  }else{
+    $("batchTitle").textContent="Make a List";
+    $("batchDescription").textContent="Enter one material per line and create multiple bilingual label drafts at once.";
+  }
+  $("batchProgress").classList.add("hidden");
+  show("batch");
+}
+
+function openCombinedBatch(mode="list"){
+  $("batchTabRow").classList.remove("hidden");
+  $("batchTitle").textContent="Create Labels Ahead";
+  $("batchDescription").textContent="Paste a whole list of materials, or paste one product link. Review everything before it goes to your saved library and print queue.";
+  setBatchMode(mode);
+  show("batch");
+}
+
+function setBatchProgress(text,cls="loading"){
+  const el=$("batchProgress");
+  el.textContent=text;
+  el.className="status "+cls;
+  el.classList.remove("hidden");
+}
+
+async function callBatchFunction(payload){
+  const response=await fetch(BATCH_LABELS_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)
+  });
+  let data={};
+  try{data=await response.json();}catch{}
+  if(!response.ok || !data.success){
+    throw new Error(data.error || data.details || `Request failed (${response.status})`);
+  }
+  return data;
+}
+
+async function createListDrafts(){
+  const items=$("batchListInput").value
+    .split(/\n+/)
+    .map(x=>x.trim())
+    .filter(Boolean);
+
+  if(!items.length){
+    alert("Add at least one material to the list.");
+    return;
+  }
+  if(items.length>25){
+    alert("For now, make batches of 25 items or fewer.");
+    return;
+  }
+
+  const btn=$("createBatchBtn");
+  btn.disabled=true;
+  btn.textContent="Creating…";
+  setBatchProgress(`Creating ${items.length} label draft${items.length===1?"":"s"}…`);
+
+  try{
+    const data=await callBatchFunction({mode:"list",items});
+    batchDrafts=(data.items||[]).map((x,i)=>({
+      id:crypto.randomUUID(),
+      original:items[i] || x.english || "",
+      english:x.english || items[i] || "",
+      spanish:x.spanish || "",
+      photo:x.photo_data || "",
+      image_source:x.image_source || "generated",
+      notes:x.notes || ""
+    }));
+    renderBatchReview();
+    show("batchReview");
+  }catch(err){
+    console.error(err);
+    setBatchProgress("I couldn't create the batch: "+err.message,"error");
+  }finally{
+    btn.disabled=false;
+    btn.textContent="Create Label Drafts";
+  }
+}
+
+async function createProductLinkDraft(){
+  const url=$("productLinkInput").value.trim();
+  if(!url){
+    alert("Paste a product page link first.");
+    return;
+  }
+  const btn=$("createLinkDraftBtn");
+  btn.disabled=true;
+  btn.textContent="Reading product page…";
+  setBatchProgress("Reading the product page and preparing the label…");
+
+  try{
+    const data=await callBatchFunction({mode:"url",url});
+    const x=(data.items||[])[0];
+    if(!x) throw new Error("No product label was returned.");
+    batchDrafts=[{
+      id:crypto.randomUUID(),
+      original:url,
+      english:x.english || "",
+      spanish:x.spanish || "",
+      photo:x.photo_data || "",
+      image_source:x.image_source || "missing",
+      needs_product_image:!!x.needs_product_image,
+      product_url:url,
+      notes:x.notes || ""
+    }];
+    renderBatchReview();
+    show("batchReview");
+  }catch(err){
+    console.error(err);
+    setBatchProgress("I couldn't create that product label: "+err.message,"error");
+  }finally{
+    btn.disabled=false;
+    btn.textContent="Create Product Label";
+  }
+}
+
+
+async function translateBatchItem(index, englishInput, spanishInput, status){
+  const english=(englishInput.value||"").trim();
+  if(!english) return;
+
+  const requestId=(batchTranslationRequestIds.get(index)||0)+1;
+  batchTranslationRequestIds.set(index,requestId);
+  status.textContent="Translating Spanish…";
+
+  try{
+    const response=await fetch(TRANSLATE_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({english})
+    });
+
+    let data={};
+    try{data=await response.json();}catch{}
+
+    if(batchTranslationRequestIds.get(index)!==requestId) return;
+
+    if(!response.ok || !data.success || !data.spanish){
+      throw new Error(data.error || data.details || `Request failed (${response.status})`);
+    }
+
+    spanishInput.value=data.spanish;
+    if(batchDrafts[index]){
+      batchDrafts[index].english=english;
+      batchDrafts[index].spanish=data.spanish;
+    }
+    status.textContent="✓ Spanish updated automatically";
+  }catch(err){
+    console.error("Batch auto-translation error:",err);
+    if(batchTranslationRequestIds.get(index)===requestId){
+      status.textContent="Spanish could not update automatically. You can still edit it manually.";
+    }
+  }
+}
+
+function scheduleBatchTranslation(index, englishInput, spanishInput, status){
+  const existing=batchTranslationTimers.get(index);
+  if(existing) clearTimeout(existing);
+
+  status.textContent="Waiting for you to finish typing…";
+
+  const timer=setTimeout(()=>{
+    translateBatchItem(index,englishInput,spanishInput,status);
+  },900);
+
+  batchTranslationTimers.set(index,timer);
+}
+
+function renderBatchReview(){
+  batchTranslationTimers.forEach(timer=>clearTimeout(timer));
+  batchTranslationTimers.clear();
+  batchTranslationRequestIds.clear();
+
+  const wrap=$("batchReviewItems");
+  wrap.innerHTML="";
+
+  batchDrafts.forEach((item,index)=>{
+    const card=document.createElement("div");
+    card.className="batch-item";
+
+    const grid=document.createElement("div");
+    grid.className="batch-grid";
+
+    const img=document.createElement("img");
+    img.className="batch-thumb";
+    if(item.photo){
+      img.src=item.photo;
+    }else{
+      img.removeAttribute("src");
+      img.style.background="linear-gradient(135deg,#f8fbfe,#eef5fb)";
+    }
+    img.alt=item.needs_product_image ? "Product photo needed" : "Label picture";
+
+    const fields=document.createElement("div");
+
+    const eLabel=document.createElement("label");
+    eLabel.textContent="English";
+    eLabel.style.marginTop="0";
+    const english=document.createElement("input");
+    english.value=item.english;
+
+    const sLabel=document.createElement("label");
+    sLabel.textContent="Spanish";
+    const spanish=document.createElement("input");
+    spanish.value=item.spanish;
+
+    const status=document.createElement("div");
+    status.className="batch-status";
+    status.textContent=item.image_source==="product"
+      ? "✓ Exact product-page image"
+      : item.image_source==="uploaded"
+        ? "✓ Your uploaded product photo"
+        : item.needs_product_image
+          ? "⚠ Exact product photo wasn't available"
+          : "Representative picture";
+
+    english.addEventListener("input",()=>{
+      batchDrafts[index].english=english.value;
+      scheduleBatchTranslation(index,english,spanish,status);
+    });
+
+    spanish.addEventListener("input",()=>{
+      batchDrafts[index].spanish=spanish.value;
+      status.textContent="Spanish edited manually";
+    });
+
+    fields.append(eLabel,english,sLabel,spanish,status);
+    grid.append(img,fields);
+
+    const actions=document.createElement("div");
+    actions.className="batch-actions";
+
+    if(item.needs_product_image){
+      const retry=document.createElement("button");
+      retry.className="secondary";
+      retry.textContent="↻ Try Product Photo Again";
+      retry.addEventListener("click",()=>retryProductPhoto(index,retry,img,status));
+
+      const upload=document.createElement("button");
+      upload.className="secondary";
+      upload.textContent="📷 Upload Product Photo";
+      upload.addEventListener("click",()=>chooseProductPhotoUpload(index,img,status));
+
+      const representative=document.createElement("button");
+      representative.className="secondary";
+      representative.textContent="✨ Use Representative";
+      representative.addEventListener("click",()=>regenerateBatchPicture(index,representative,img,status));
+
+      const remove=document.createElement("button");
+      remove.className="secondary danger";
+      remove.textContent="Remove";
+      remove.addEventListener("click",()=>{
+        batchDrafts.splice(index,1);
+        renderBatchReview();
+      });
+
+      actions.append(retry,upload,representative,remove);
+    }else{
+      const regen=document.createElement("button");
+      regen.className="secondary";
+      regen.textContent=item.image_source==="product" || item.image_source==="uploaded"
+        ? "✨ Use Representative Instead"
+        : "✨ New Picture";
+      regen.addEventListener("click",()=>regenerateBatchPicture(index,regen,img,status));
+
+      const remove=document.createElement("button");
+      remove.className="secondary danger";
+      remove.textContent="Remove";
+      remove.addEventListener("click",()=>{
+        batchDrafts.splice(index,1);
+        renderBatchReview();
+      });
+
+      actions.append(regen,remove);
+    }
+
+    card.append(grid,actions);
+    wrap.append(card);
+  });
+}
+
+
+async function retryProductPhoto(index,button,img,status){
+  const item=batchDrafts[index];
+  if(!item?.product_url) return;
+
+  button.disabled=true;
+  button.textContent="Trying…";
+  status.textContent="Looking for the exact product photo again…";
+
+  try{
+    const data=await callBatchFunction({mode:"url",url:item.product_url});
+    const x=(data.items||[])[0];
+    if(!x) throw new Error("No product result was returned.");
+
+    batchDrafts[index].english=x.english || item.english;
+    batchDrafts[index].spanish=x.spanish || item.spanish;
+    batchDrafts[index].photo=x.photo_data || "";
+    batchDrafts[index].image_source=x.image_source || "missing";
+    batchDrafts[index].needs_product_image=!!x.needs_product_image;
+    batchDrafts[index].notes=x.notes || "";
+
+    renderBatchReview();
+  }catch(err){
+    console.error(err);
+    status.textContent="Exact product photo still couldn't be retrieved.";
+  }finally{
+    button.disabled=false;
+    button.textContent="↻ Try Product Photo Again";
+  }
+}
+
+function chooseProductPhotoUpload(index,img,status){
+  const input=document.createElement("input");
+  input.type="file";
+  input.accept="image/*";
+  input.style.display="none";
+
+  input.addEventListener("change",async()=>{
+    const file=input.files?.[0];
+    if(!file) return;
+    try{
+      const raw=await dataUrlFromFile(file);
+      const image=new Image();
+      await new Promise((resolve,reject)=>{
+        image.onload=resolve;
+        image.onerror=reject;
+        image.src=raw;
+      });
+
+      const maxSide=1200;
+      const scale=Math.min(1,maxSide/Math.max(image.naturalWidth,image.naturalHeight));
+      const w=Math.max(1,Math.round(image.naturalWidth*scale));
+      const h=Math.max(1,Math.round(image.naturalHeight*scale));
+      const canvas=document.createElement("canvas");
+      canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext("2d");
+      ctx.fillStyle="#ffffff";
+      ctx.fillRect(0,0,w,h);
+      ctx.drawImage(image,0,0,w,h);
+
+      const dataUrl=canvas.toDataURL("image/jpeg",0.9);
+      batchDrafts[index].photo=dataUrl;
+      batchDrafts[index].image_source="uploaded";
+      batchDrafts[index].needs_product_image=false;
+      img.src=dataUrl;
+      status.textContent="✓ Your uploaded product photo";
+      renderBatchReview();
+    }catch(err){
+      alert("I couldn't use that product photo. Please try another image.");
+    }finally{
+      input.remove();
+    }
+  });
+
+  document.body.appendChild(input);
+  input.click();
+}
+
+async function regenerateBatchPicture(index,button,img,status){
+  const item=batchDrafts[index];
+  if(!item) return;
+  button.disabled=true;
+  button.textContent="Generating…";
+  try{
+    const data=await callBatchFunction({
+      mode:"image",
+      english:item.english,
+      spanish:item.spanish
+    });
+    const x=(data.items||[])[0];
+    if(!x?.photo_data) throw new Error("No picture was returned.");
+    batchDrafts[index].photo=x.photo_data;
+    batchDrafts[index].image_source="generated";
+    batchDrafts[index].needs_product_image=false;
+    img.src=x.photo_data;
+    status.textContent="Representative picture";
+  }catch(err){
+    alert("I couldn't make a new picture: "+err.message);
+  }finally{
+    button.disabled=false;
+    button.textContent="✨ New Picture";
+  }
+}
+
+function sizesForBatchSet(){
+  const value=$("batchSetSelect").value;
+  if(value==="matching") return ["Business Card · 3.375 × 2 in","Business Card · 3.375 × 2 in"];
+  if(value==="different") return ["Business Card · 3.375 × 2 in","CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)"];
+  if(value==="single-cp") return ["CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)"];
+  return ["Business Card · 3.375 × 2 in"];
+}
+
+async function saveAllBatch(){
+  if(!batchDrafts.length){
+    alert("There aren't any labels left in this batch.");
+    return;
+  }
+  const btn=$("saveAllBatchBtn");
+  btn.disabled=true;
+  btn.textContent="Saving batch…";
+
+  try{
+    const sizes=sizesForBatchSet();
+
+    for(let i=0;i<batchDrafts.length;i++){
+      const draft=batchDrafts[i];
+      const english=(draft.english||"").trim();
+      const spanish=(draft.spanish||"").trim();
+      if(!english || !spanish) throw new Error(`Label ${i+1} needs both English and Spanish wording.`);
+      if(draft.needs_product_image || !draft.photo){
+        throw new Error(`"${english}" still needs a product photo. Upload the real photo, retry, or explicitly choose a representative picture.`);
+      }
+      const storedPhoto=await prepareCloudPhoto(draft.photo || "");
+
+      if(cloudReady){
+        let label=library.find(x=>
+          (x.english||"").toLowerCase()===english.toLowerCase() &&
+          (x.spanish||"").toLowerCase()===spanish.toLowerCase()
+        );
+
+        if(!label){
+          const savedRows=await restFetch("labels",{
+            method:"POST",
+            headers:{"Prefer":"return=representation"},
+            body:JSON.stringify({english,spanish,photo_data:storedPhoto})
+          });
+          const saved=savedRows?.[0];
+          if(!saved) throw new Error("A saved label was not returned by Supabase.");
+          label={id:saved.id,english:saved.english,spanish:saved.spanish,photo:saved.photo_data||""};
+        }
+
+        const rows=sizes.map(size=>({
+          label_id:label.id,
+          english,
+          spanish,
+          photo_data:storedPhoto,
+          size
+        }));
+        await restFetch("print_queue",{
+          method:"POST",
+          headers:{"Prefer":"return=representation"},
+          body:JSON.stringify(rows)
+        });
+      }else{
+        const base={english,spanish,photo:storedPhoto};
+        sizes.forEach(size=>queue.push({...base,size,id:crypto.randomUUID()}));
+        if(!library.some(x=>x.english===english && x.spanish===spanish)) library.push(base);
+      }
+    }
+
+    if(cloudReady) await loadCloudData();
+    else{refreshQueue();refreshLibrary();}
+    batchDrafts=[];
+    $("batchListInput").value="";
+    $("productLinkInput").value="";
+    show("queue");
+  }catch(err){
+    console.error(err);
+    alert("I couldn't save the whole batch: "+err.message);
+  }finally{
+    btn.disabled=false;
+    btn.textContent="✓ Save All + Add to Print Queue";
+  }
+}
+
+
+$("makeListBack").addEventListener("click",()=>show("home"));
+$("makeListCreateBtn").addEventListener("click",()=>{
+  const text=$("makeListInput").value;
+  if(!text.trim()){alert("Add at least one material to the list.");return;}
+  batchMode="list";
+  $("batchListInput").value=text;
+  $("createBatchBtn").click();
+});
+$("homePhotoBtn").addEventListener("click",()=>{
+  $("homeCameraInput").value="";
+  $("homeCameraInput").click();
+});
+$("homeGalleryBtn").addEventListener("click",()=>{
+  $("homeGalleryInput").value="";
+  $("homeGalleryInput").click();
+});
+$("homeProductBtn").addEventListener("click",()=>openDedicatedBatch("link"));
+$("homeListBtn").addEventListener("click",()=>show("makeList"));
+$("saveRecoveryPasswordBtn").addEventListener("click",saveRecoveryPassword);
+$("accountBtn").addEventListener("click",()=>{updateAccountUI();show("account")});
+$("accountBack").addEventListener("click",()=>show("home"));
+$("sendAccountCodeBtn").addEventListener("click",convertAnonymousEmail);
+$("verifyAccountCodeBtn").addEventListener("click",verifyAccountEmail);
+$("finishAccountBtn").addEventListener("click",finishPermanentAccount);
+$("signInBtn").addEventListener("click",signInPermanent);
+$("refreshAccountDataBtn").addEventListener("click",async()=>{
+  await loadCloudData();
+  alert("Your labels and print queue are refreshed.");
+});
+$("signOutBtn").addEventListener("click",signOutPermanent);
+
+if($("startBtn")) $("startBtn").addEventListener("click",()=>show("capture"));
+if($("batchBtn")) $("batchBtn").addEventListener("click",()=>openCombinedBatch("list"));
+$("batchBack").addEventListener("click",()=>show("home"));
+$("batchReviewBack").addEventListener("click",()=>batchMode==="list" ? show("makeList") : openDedicatedBatch("link"));
+$("listTabBtn").addEventListener("click",()=>setBatchMode("list"));
+$("linkTabBtn").addEventListener("click",()=>setBatchMode("link"));
+$("createBatchBtn").addEventListener("click",createListDrafts);
+$("createLinkDraftBtn").addEventListener("click",createProductLinkDraft);
+$("saveAllBatchBtn").addEventListener("click",saveAllBatch);
+$("queueBtn").addEventListener("click",()=>{refreshQueue();show("queue")});
+$("libraryBtn").addEventListener("click",()=>{refreshLibrary();show("library")});
+$("captureBack").addEventListener("click",()=>show("home"));
+$("confirmBack").addEventListener("click",()=>show("capture"));
+$("previewBack").addEventListener("click",()=>show("confirm"));
+$("setsBack").addEventListener("click",()=>show("preview"));
+$("queueBack").addEventListener("click",()=>show("home"));
+$("libraryBack").addEventListener("click",()=>show("home"));
+$("reprintBack").addEventListener("click",()=>{refreshLibrary();show("library")});
+$("librarySearch").addEventListener("input",refreshLibrary);
+document.querySelectorAll(".reprint-choice").forEach(c=>c.addEventListener("click",()=>{
+  document.querySelectorAll(".reprint-choice").forEach(x=>x.classList.remove("selected"));
+  c.classList.add("selected");
+  selectedReprintSet=c.dataset.reprintSet;
+  $("reprintSingleWrap").classList.toggle("hidden",selectedReprintSet!=="single");
+}));
+$("reprintQueueBtn").addEventListener("click",addSavedLabelToQueue);
+$("cameraInput").addEventListener("change",e=>handlePhoto(e.target.files?.[0]));
+$("galleryInput").addEventListener("change",e=>handlePhoto(e.target.files?.[0]));
+$("homeGalleryInput").addEventListener("change",async e=>{
+  const file=e.target.files?.[0];
+  if(!file) return;
+
+  // Show a compact temporary status on Home instead of opening Photograph Material.
+  const cloud=$("cloudStatus");
+  const oldText=cloud.textContent;
+  const oldClass=cloud.className;
+  cloud.textContent="✨ Preparing and identifying your photo…";
+  cloud.className="status loading";
+  cloud.classList.remove("hidden");
+
+  try{
+    await handlePhoto(file);
+  }finally{
+    // identify() will navigate to confirmation on success.
+    // If we are still on Home, restore the normal compact Home state.
+    if(!$("home").classList.contains("hidden")){
+      cloud.textContent=oldText;
+      cloud.className=oldClass;
+      cloud.classList.add("hidden");
+    }
+  }
+});
+
+$("homeCameraInput").addEventListener("change",async e=>{
+  const file=e.target.files?.[0];
+  if(!file) return;
+
+  // Stay on Home while the camera photo is prepared and identified.
+  const cloud=$("cloudStatus");
+  const oldText=cloud.textContent;
+  const oldClass=cloud.className;
+  cloud.textContent="✨ Preparing and identifying your photo…";
+  cloud.className="status loading";
+  cloud.classList.remove("hidden");
+
+  try{
+    await handlePhoto(file);
+  }finally{
+    // identify() opens confirmation on success. If it failed, restore Home.
+    if(!$("home").classList.contains("hidden")){
+      cloud.textContent=oldText;
+      cloud.className=oldClass;
+      cloud.classList.add("hidden");
+    }
+  }
+});
+$("retryIdentify").addEventListener("click",identify);
+$("thatsRight").addEventListener("click",()=>{populateConfirm();show("preview")});
+$("editIdentification").addEventListener("click",()=>{populateConfirm();show("preview");$("englishInput").focus()});
+$("englishInput").addEventListener("input",()=>{
+  syncLabel();
+  scheduleAutoTranslation();
+});
+$("spanishInput").addEventListener("input",()=>{
+  syncLabel();
+  $("translationStatus").textContent="Spanish edited manually";
+});
+$("chooseSetBtn").addEventListener("click",()=>{updateSetSummary();show("sets")});
+document.querySelectorAll(".choice").forEach(c=>c.addEventListener("click",()=>{
+  document.querySelectorAll(".choice").forEach(x=>x.classList.remove("selected"));
+  c.classList.add("selected");
+  selectedSet=c.dataset.set;
+  $("singleSizeWrap").classList.toggle("hidden",selectedSet!=="single");
+  updateSetSummary();
+}));
+$("singleSize").addEventListener("change",updateSetSummary);
+$("addToQueue").addEventListener("click",addQueue);
+$("nextMaterialBtn").addEventListener("click",()=>{
+  photoDataUrl="";
+  rawRemovedPhotoDataUrl="";
+  cleanedPhotoDataUrl="";
+  activePhotoDataUrl="";
+  cleanupMode="normal";
+  cleanupSucceeded=false;
+  $("cleanupStrengthWrap").classList.add("hidden");
+  identification=null;
+  clearTimeout(translationTimer);
+  translationRequestId++;
+  lastAutoTranslatedEnglish="";
+  $("translationStatus").textContent="";
+  $("cameraInput").value="";
+  $("galleryInput").value="";
+  if($("homeCameraInput")) $("homeCameraInput").value="";
+  if($("homeGalleryInput")) $("homeGalleryInput").value="";
+  $("capturedPreview").src="";
+  $("capturedPreview").classList.add("hidden");
+  $("identifyStatus").className="status hidden";
+  $("identifyStatus").textContent="";
+  $("retryIdentify").classList.add("hidden");
+  show("home");
+});
+$("normalCleanupBtn").addEventListener("click",()=>applyCleanupMode("normal"));
+$("strongCleanupBtn").addEventListener("click",()=>applyCleanupMode("strong"));
+$("useCleanedBtn").addEventListener("click",()=>{
+  if(cleanedPhotoDataUrl){
+    activePhotoDataUrl=cleanedPhotoDataUrl;
+    $("confirmPhoto").src=activePhotoDataUrl;
+    $("useCleanedBtn").className="primary";
+    $("useOriginalBtn").className="secondary";
+    syncLabel();
+  }
+});
+$("useOriginalBtn").addEventListener("click",()=>{
+  activePhotoDataUrl=photoDataUrl;
+  $("confirmPhoto").src=activePhotoDataUrl;
+  $("useOriginalBtn").className="primary";
+  $("useCleanedBtn").className="secondary";
+  syncLabel();
+});
+$("retryCleanupBtn").addEventListener("click",cleanBackground);
+$("mockSheets").addEventListener("click",createPrintSheets);
+$("printPreviewBack").addEventListener("click",()=>show("queue"));
+$("cutLinesToggle").addEventListener("change",()=>renderPrintSheets());
+$("printNowBtn").addEventListener("click",printCurrentSheets);
+$("markSheetPrintedBtn").addEventListener("click",markCurrentSheetPrinted);
+updateSetSummary();
+(async()=>{
+  const handledRecovery = await startRecoveryFromUrl();
+  if(!handledRecovery){
+    await initCloud();
+  }
+})();
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load",async()=>{
+    try{
+      // Force old installed PWA shells to release the stale index.html.
+      const regs=await navigator.serviceWorker.getRegistrations();
+      for(const reg of regs){
+        await reg.unregister();
+      }
+
+      if("caches" in window){
+        const keys=await caches.keys();
+        await Promise.all(
+          keys
+            .filter(k=>k.startsWith("early-eagle-label-maker-"))
+            .map(k=>caches.delete(k))
+        );
+      }
+
+      await navigator.serviceWorker.register("./service-worker.js?v=32",{
+        updateViaCache:"none"
+      });
+
+      // One-time reload so the newly installed worker/page wins immediately.
+      const flag="eea_force_refresh_v32";
+      if(!sessionStorage.getItem(flag)){
+        sessionStorage.setItem(flag,"1");
+        window.location.replace(
+          window.location.pathname + "?appv=32" + window.location.hash
+        );
+      }
+    }catch(err){
+      console.warn("Forced service worker refresh failed:",err);
+    }
+  });
+}
+</script>
+</body>
+</html>
