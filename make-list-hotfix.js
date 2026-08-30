@@ -1,5 +1,5 @@
 (()=>{
-  const LIST_CHUNK_SIZE=4;
+  const LIST_CHUNK_SIZE=1;
   const LIST_CONCURRENCY=3;
   let sessionRefreshPromise=null;
 
@@ -69,7 +69,9 @@
     const oldText=btn.textContent;
     btn.disabled=true;
     btn.textContent="Creating…";
-    progress.textContent=`Starting ${items.length} label draft${items.length===1?"":"s"}…`;
+    progress.textContent=items.length===1
+      ? "Creating 1 label…"
+      : `Creating ${items.length} labels — up to ${Math.min(LIST_CONCURRENCY,items.length)} at a time…`;
     progress.className="status loading";
     progress.classList.remove("hidden");
 
@@ -92,7 +94,7 @@
           results[chunkIndex]=chunkItems;
           completed+=chunk.items.length;
           const shown=Math.min(completed,items.length);
-          progress.textContent=`Created ${shown} of ${items.length} labels…`;
+          progress.textContent=`Created ${shown} of ${items.length} label${items.length===1?"":"s"}…`;
         }
       }
 
@@ -145,8 +147,8 @@
 
   function installMakeListFix(){
     const btn=document.getElementById("makeListCreateBtn");
-    if(!btn || btn.dataset.listFixInstalled==="2") return;
-    btn.dataset.listFixInstalled="2";
+    if(!btn || btn.dataset.listFixInstalled==="3") return;
+    btn.dataset.listFixInstalled="3";
     btn.addEventListener("click",event=>{
       event.preventDefault();
       event.stopImmediatePropagation();
