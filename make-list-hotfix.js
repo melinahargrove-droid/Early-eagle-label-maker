@@ -1,4 +1,51 @@
 (()=>{
+  const LIST_CHUNK_SIZE=4;
+  const LIST_CONCURRENCY=3;
+  let sessionRefreshPromise=null;
+
+  function batchHeaders(){
+    const headers={"Content-Type":"application/json"};
+    if(typeof SUPABASE_PUBLISHABLE_KEY!=="undefined" && SUPABASE_PUBLISHABLE_KEY){
+      headers.apikey=SUPABASE_PUBLISHABLE_KEY;
+    }
+    if(typeof cloudSession!=="undefined" && cloudSession?.access_token){
+      headers.Authorization=`Bearer ${cloudSession.access_token}`;
+    }
+    return headers;
+  }
+
+  async function refreshSessionOnce(){
+    if(typeof cloudSession==="undefined" || !cloudSession?.refresh_token || typeof refreshCloudSession!=="function") return;
+    if(!sessionRefreshPromise){
+      sessionRefreshPromise=refreshCloudSession(cloudSession.refresh_token).finally(()=>{sessionRefreshPromise=null;});
+    }
+    await sessionRefreshPromise;
+  }
+
+  async function callListChunk(items){
+    let response=await fetch(BATCH_LABELS_URL,{
+      method:"POST",
+      headers:batchHeaders(),
+      body:JSON.stringify({mode:"list",items})
+    });
+
+    if(response.status===401){
+      await refreshSessionOnce();
+      response=await fetch(BATCH_LABELS_URL,{
+        method:"POST",
+        headers:batchHeaders(),
+        body:JSON.stringify({mode:"list",items})
+      });
+    }
+
+    let data={};
+    try{data=await response.json();}catch{}
+    if(!response.ok || !data.success){
+      throw new Error(data.error || data.details || `Request failed (${response.status})`);
+    }
+    return data.items||[];
+  }
+
   async function createListDraftsFromHome(){
     const input=document.getElementById("makeListInput");
     const btn=document.getElementById("makeListCreateBtn");
@@ -22,53 +69,50 @@
     const oldText=btn.textContent;
     btn.disabled=true;
     btn.textContent="Creating…";
-    progress.textContent=`Creating ${items.length} label draft${items.length===1?"":"s"}…`;
+    progress.textContent=`Starting ${items.length} label draft${items.length===1?"":"s"}…`;
     progress.className="status loading";
     progress.classList.remove("hidden");
 
     try{
-      const headers={"Content-Type":"application/json"};
-      if(typeof SUPABASE_PUBLISHABLE_KEY!=="undefined" && SUPABASE_PUBLISHABLE_KEY){
-        headers.apikey=SUPABASE_PUBLISHABLE_KEY;
-      }
-      if(typeof cloudSession!=="undefined" && cloudSession?.access_token){
-        headers.Authorization=`Bearer ${cloudSession.access_token}`;
+      const chunks=[];
+      for(let start=0;start<items.length;start+=LIST_CHUNK_SIZE){
+        chunks.push({start,items:items.slice(start,start+LIST_CHUNK_SIZE)});
       }
 
-      let response=await fetch(BATCH_LABELS_URL,{
-        method:"POST",
-        headers,
-        body:JSON.stringify({mode:"list",items})
+      const results=new Array(chunks.length);
+      let nextChunk=0;
+      let completed=0;
+
+      async function worker(){
+        while(true){
+          const chunkIndex=nextChunk++;
+          if(chunkIndex>=chunks.length) return;
+          const chunk=chunks[chunkIndex];
+          const chunkItems=await callListChunk(chunk.items);
+          results[chunkIndex]=chunkItems;
+          completed+=chunk.items.length;
+          const shown=Math.min(completed,items.length);
+          progress.textContent=`Created ${shown} of ${items.length} labels…`;
+        }
+      }
+
+      const workerCount=Math.min(LIST_CONCURRENCY,chunks.length);
+      await Promise.all(Array.from({length:workerCount},()=>worker()));
+
+      const returned=[];
+      results.forEach((chunkItems,chunkIndex)=>{
+        const source=chunks[chunkIndex];
+        source.items.forEach((original,i)=>{
+          const x=chunkItems?.[i]||{};
+          returned.push({original,x});
+        });
       });
 
-      // If the session expired, refresh it once using the app's existing helper and retry.
-      if(response.status===401 && typeof cloudSession!=="undefined" && cloudSession?.refresh_token && typeof refreshCloudSession==="function"){
-        await refreshCloudSession(cloudSession.refresh_token);
-        const retryHeaders={"Content-Type":"application/json"};
-        if(typeof SUPABASE_PUBLISHABLE_KEY!=="undefined" && SUPABASE_PUBLISHABLE_KEY){
-          retryHeaders.apikey=SUPABASE_PUBLISHABLE_KEY;
-        }
-        if(cloudSession?.access_token){
-          retryHeaders.Authorization=`Bearer ${cloudSession.access_token}`;
-        }
-        response=await fetch(BATCH_LABELS_URL,{
-          method:"POST",
-          headers:retryHeaders,
-          body:JSON.stringify({mode:"list",items})
-        });
-      }
-
-      let data={};
-      try{ data=await response.json(); }catch{}
-      if(!response.ok || !data.success){
-        throw new Error(data.error || data.details || `Request failed (${response.status})`);
-      }
-
       batchMode="list";
-      batchDrafts=(data.items||[]).map((x,i)=>({
+      batchDrafts=returned.map(({original,x})=>({
         id:crypto.randomUUID(),
-        original:items[i] || x.english || "",
-        english:x.english || items[i] || "",
+        original,
+        english:x.english || original,
         spanish:x.spanish || "",
         photo:x.photo_data || "",
         image_source:x.image_source || "generated",
@@ -78,6 +122,10 @@
       if(!batchDrafts.length){
         throw new Error("The label service returned no label drafts.");
       }
+
+      progress.textContent=`Finished ${batchDrafts.length} label${batchDrafts.length===1?"":"s"}. Opening review…`;
+      progress.className="status ok";
+      progress.classList.remove("hidden");
 
       if(typeof renderBatchReview!=="function" || typeof show!=="function"){
         throw new Error("The label review screen is unavailable.");
@@ -97,8 +145,8 @@
 
   function installMakeListFix(){
     const btn=document.getElementById("makeListCreateBtn");
-    if(!btn || btn.dataset.listFixInstalled==="1") return;
-    btn.dataset.listFixInstalled="1";
+    if(!btn || btn.dataset.listFixInstalled==="2") return;
+    btn.dataset.listFixInstalled="2";
     btn.addEventListener("click",event=>{
       event.preventDefault();
       event.stopImmediatePropagation();
