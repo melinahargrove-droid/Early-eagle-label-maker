@@ -1,5 +1,5 @@
-const CACHE="early-eagle-label-maker-v34";
-const APP_SHELL=["./","./index.html?appv=34","./manifest.webmanifest","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./make-list-hotfix.js?v=34"];
+const CACHE="early-eagle-label-maker-v35";
+const APP_SHELL=["./","./index.html?appv=35","./manifest.webmanifest","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./make-list-hotfix.js?v=35","./pwa-version-fix.js?v=35"];
 
 self.addEventListener("install",e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(APP_SHELL)));
@@ -15,8 +15,11 @@ async function injectHotfix(response){
   if(!response) return response;
   try{
     const text=await response.text();
-    const tag='<script src="./make-list-hotfix.js?v=34"></script>';
-    const html=text.includes("make-list-hotfix.js") ? text : text.replace("</body>",tag+"</body>");
+    const listTag='<script src="./make-list-hotfix.js?v=35"></script>';
+    const versionTag='<script src="./pwa-version-fix.js?v=35"></script>';
+    let html=text;
+    if(!html.includes("make-list-hotfix.js")) html=html.replace("</body>",listTag+"</body>");
+    if(!html.includes("pwa-version-fix.js")) html=html.replace("</body>",versionTag+"</body>");
     const headers=new Headers(response.headers);
     headers.delete("content-length");
     return new Response(html,{status:response.status,statusText:response.statusText,headers});
@@ -33,7 +36,7 @@ self.addEventListener("fetch",e=>{
       try{
         return await injectHotfix(await fetch(e.request,{cache:"no-store"}));
       }catch{
-        return await injectHotfix(await caches.match("./index.html?appv=34"));
+        return await injectHotfix(await caches.match("./index.html?appv=35"));
       }
     })());
     return;
