@@ -1,22 +1,28 @@
 (()=>{
-  const APP_VERSION="35";
+  const APP_VERSION="36";
   const REFRESH_FLAG=`eea_force_refresh_v${APP_VERSION}`;
 
+  function updateVisibleBuild(){
+    document.querySelectorAll('.footer-note span').forEach(el=>{
+      if(/App build\s+\d+/i.test(el.textContent||'')){
+        el.textContent=`App build ${APP_VERSION}`;
+      }
+    });
+  }
+
   async function forceCurrentWorker(){
+    updateVisibleBuild();
     if(!('serviceWorker' in navigator)) return;
     try{
       const regs=await navigator.serviceWorker.getRegistrations();
       for(const reg of regs){
-        const script=reg.active?.scriptURL||reg.waiting?.scriptURL||reg.installing?.scriptURL||"";
-        if(!script.includes(`service-worker.js?v=${APP_VERSION}`)){
-          await reg.unregister();
-        }
+        await reg.unregister();
       }
 
       if('caches' in window){
         const keys=await caches.keys();
         await Promise.all(keys
-          .filter(k=>k.startsWith('early-eagle-label-maker-') && k!==`early-eagle-label-maker-v${APP_VERSION}`)
+          .filter(k=>k.startsWith('early-eagle-label-maker-'))
           .map(k=>caches.delete(k)));
       }
 
@@ -29,12 +35,20 @@
         sessionStorage.setItem(REFRESH_FLAG,'1');
         url.searchParams.set('appv',APP_VERSION);
         window.location.replace(url.toString());
+        return;
       }
+      updateVisibleBuild();
     }catch(err){
       console.warn('PWA version refresh failed:',err);
+      updateVisibleBuild();
     }
   }
 
-  // Run after the legacy v32 load handler, then correct it immediately.
-  window.addEventListener('load',()=>setTimeout(forceCurrentWorker,50));
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',updateVisibleBuild,{once:true});
+  }else{
+    updateVisibleBuild();
+  }
+
+  window.addEventListener('load',()=>setTimeout(forceCurrentWorker,100));
 })();
