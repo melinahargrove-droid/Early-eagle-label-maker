@@ -1,5 +1,5 @@
 (()=>{
-  const APP_VERSION="38";
+  const APP_VERSION="39";
   const REFRESH_FLAG=`eea_force_refresh_v${APP_VERSION}`;
 
   function updateVisibleBuild(){
