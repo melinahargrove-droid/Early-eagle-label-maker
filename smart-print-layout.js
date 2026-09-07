@@ -1,12 +1,13 @@
 (()=>{
-  // Paper-saving print packer for mixed Early Eagle label sizes.
-  // CP basket labels stay upright because their fold line must remain horizontal.
-  // Business-card labels may rotate 90° when that uses otherwise wasted page space.
+  // Legacy paper-saving packer retained for compatibility.
+  // Sellable label sizing is now supplied by sellable-label-wiring.js.
+  // IMPORTANT: rotation here only changes placement dimensions. The finished
+  // artwork itself is rotated later as a whole raster so it is never stretched.
   const PAGE_W=8.5, PAGE_H=11, MARGIN=.25, GAP=.08;
   const EPS=.0001;
 
   function dims(item){
-    const cp=String(item.size||'').toLowerCase().includes('cp basket');
+    const cp=String(item.size||'').toLowerCase().includes('cp basket') || String(item.size||'').toLowerCase().includes('fold-over basket');
     return cp ? {w:4.5,h:3,type:'cp'} : {w:3.375,h:2,type:'business'};
   }
 
@@ -45,7 +46,6 @@
     for(const pt of candidates(placed)){
       for(const o of orientations){
         if(!fits(pt.x,pt.y,o.w,o.h,placed)) continue;
-        // Prefer top/left packing, then the orientation that leaves the smaller right-side sliver.
         const rightWaste=(PAGE_W-MARGIN)-(pt.x+o.w);
         const bottom=(pt.y+o.h);
         const score=pt.y*1000 + pt.x*100 + rightWaste + bottom*.01;
@@ -60,10 +60,8 @@
   function packOnePage(pending){
     const placed=[];
     const used=new Set();
-    // CP labels first; then cards fill the gaps around them.
     const order=pending.map((item,index)=>({item,index,d:dims(item)}))
       .sort((a,b)=>(a.d.type===b.d.type?0:(a.d.type==='cp'?-1:1)) || (b.d.h*b.d.w-a.d.h*a.d.w));
-
     let changed=true;
     while(changed){
       changed=false;
@@ -86,7 +84,6 @@
     while(pending.length){
       const {placed,used}=packOnePage(pending);
       if(!placed.length){
-        // Safety fallback; should never happen for supported label sizes.
         const item=pending[0], d=dims(item);
         placed.push({...item,x:MARGIN,y:MARGIN,_w:d.w,_h:d.h,_type:d.type,_rotated:false});
         used.add(0);
@@ -96,30 +93,4 @@
     }
     return pages;
   };
-
-  // Rotate the already-rasterized business-card artwork inside its packed rectangle.
-  const originalRender=window.renderPrintSheets;
-  if(typeof originalRender==='function'){
-    window.renderPrintSheets=async function(){
-      await originalRender();
-      const apply=(root,selector)=>{
-        root.querySelectorAll(selector).forEach((el,i)=>{
-          const flat=(window.printLayoutPages||[]).flat();
-          const item=flat[i];
-          if(!item?._rotated) return;
-          const img=el.querySelector('img');
-          if(!img) return;
-          img.style.position='absolute';
-          img.style.left='50%'; img.style.top='50%';
-          img.style.width=`${(item._h/item._w)*100}%`;
-          img.style.height=`${(item._w/item._h)*100}%`;
-          img.style.maxWidth='none'; img.style.maxHeight='none';
-          img.style.transform='translate(-50%,-50%) rotate(90deg)';
-          img.style.transformOrigin='center center';
-        });
-      };
-      apply(document,'#sheetPreviewPages .raster-sheet-label');
-      apply(document,'#printRoot .raster-print-label');
-    };
-  }
 })();
