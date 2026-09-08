@@ -1,12 +1,24 @@
-Early Eagle Academy Classroom Label Maker — phone-capable prototype
+Little Labels by One Little Teacher
 
-HOW TO TRY IT
-1. This is a real mobile-web prototype: the Make a Label control uses the phone browser's camera/file input.
-2. To use camera capture on a phone, the page should be served from a secure HTTPS website (rather than opened as a local file). Most phone browsers restrict camera features on local files.
-3. Current working features: camera/photo selection, English/Spanish text editing, label preview, locked label-set logic, print queue, browser print/save-PDF.
-4. Not yet connected: AI object identification, web product search, automated background removal, cloud label library, automated true-size 8.5x11 PDF imposition. Those require a hosted backend/API services.
+Little Labels is a mobile-first classroom label maker designed to help teachers create, save, organize, and print classroom labels quickly.
 
-LOCKED LABEL SET LOGIC
-- Two Matching Labels = 2 Business Card labels (3.5 x 2 in)
-- Two Different-Size Labels = 1 Business Card (3.5 x 2 in) + 1 CP Basket (3 x 2.5 in)
-- Single Label = choose Business Card or CP Basket
+CURRENT V1 FEATURES
+- Take a photo or choose one from the phone.
+- Type a label manually.
+- Create a whole set from a typed list.
+- Create labels from a product link.
+- Create student name labels in batches.
+- Optional second-language translations, with English-only mode available.
+- Optional background removal for photos.
+- Multiple teacher-selected label sizes and reusable label sets.
+- Ready to Print queue with copy/remove controls.
+- My Labels library for saved labels and reprints.
+- True-size 8.5 × 11 print-sheet layout with cut-line option.
+- Cloud-backed account/sync support.
+- First-use onboarding and a Help / How It Works guide.
+
+PRINTING
+Use Letter / 8.5 × 11 paper and print at 100% / Actual Size so label dimensions remain accurate. Do not use Fit to Page.
+
+BRAND
+Little Labels is part of the One Little Teacher product family.
