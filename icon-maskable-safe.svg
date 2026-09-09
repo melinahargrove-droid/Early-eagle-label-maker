@@ -1,11 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <clipPath id="roundedIcon">
-      <rect x="41" y="38" width="430" height="430" rx="72" ry="72"/>
-    </clipPath>
-  </defs>
   <rect width="512" height="512" fill="#C8BAE8"/>
-  <g transform="translate(41 34) scale(.84)" clip-path="url(#roundedIcon)">
+  <g transform="translate(41 34) scale(.84)">
     <image href="icon-512.png?v=95" x="0" y="0" width="512" height="512" preserveAspectRatio="xMidYMid meet"/>
   </g>
 </svg>
