@@ -1,6 +1,3 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" fill="#C8BAE8"/>
-  <g transform="translate(41 34) scale(.84)">
-    <image href="icon-512.png?v=95" x="0" y="0" width="512" height="512" preserveAspectRatio="xMidYMid meet"/>
-  </g>
+  <image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAAEAAElEQVR42uy9e5RtV3Xf+9y9733OObfwJEmwJDYkIYQkKUhKQxOwJCQJQ1JMSQk0gZo2gVQ0mE5SKu2J0u2K0q5W8a4qzV6rWq+q2lq3Z1urvV2rVqlbXnY22k1W7k2q3wXKJQm4QmZCkJCEgJIYQhJzjnnnHPOeX9/3M+ZGQmShJPM+Z6z1+v1et7P+7zPec9zPp/3Oed8b/0qAQAAAPj/5P8BAAD//wMAUEsBAi0DFAAAAAgAAAAAIQAAAAAAAAAAAAAAAAAAAAAAAGNvbnRlbnQucG5nUEsFBgAAAAABAAEANgAAABYAAAAAAA==" x="0" y="0" width="512" height="512" preserveAspectRatio="xMidYMid meet"/>
 </svg>
