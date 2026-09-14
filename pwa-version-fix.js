@@ -1,5 +1,5 @@
 (()=>{
-  const APP_VERSION="104";
+  const APP_VERSION="107";
 
   function updateVisibleBuild(){
     document.querySelectorAll('.footer-note span').forEach(el=>{
@@ -7,7 +7,7 @@
     });
   }
 
-  // Build 104 deliberately does NOT unregister workers, clear caches,
+  // Build 107 deliberately does NOT unregister workers, clear caches,
   // or force a navigation. Those recovery actions can strand an
   // installed PWA on a blank shell. Little Labels now lets the page
   // finish loading normally and keeps PWA recovery separate from UI boot.

@@ -2,7 +2,7 @@
   "name":"Little Labels",
   "short_name":"Little Labels",
   "description":"Beautiful classroom labels, made simple.",
-  "start_url":"./diagnostic-loader.html?appv=107",
+  "start_url":"./?appv=107",
   "scope":"./",
   "display":"standalone",
   "background_color":"#FCF8F0",
