@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Reset Little Labels</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#FCF8F0;color:#17375E;font-family:Arial,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}.card{width:min(430px,100%);background:#FFFDF9;border:1px solid #DDE6EC;border-radius:24px;padding:24px;box-shadow:0 12px 38px rgba(23,55,94,.10);text-align:center}h1{font-family:Georgia,serif;font-weight:500;margin:0 0 10px}p{color:#61758A;line-height:1.5}.status{margin:16px 0;padding:12px;border-radius:14px;background:#EEF7FD}.ok{background:#EDF7EF;color:#315E42}.bad{background:#FCEDEC;color:#8B4D49}button,a{display:block;width:100%;border:0;border-radius:16px;padding:14px 16px;font:inherit;font-weight:800;text-decoration:none;margin-top:10px}.go{background:#BEDBF0;color:#17375E}.again{background:#fff;color:#17375E;border:1px solid #DDE6EC}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Little Labels Reset ♡</h1>
+    <p>This page clears only old Little Labels browser/app files. Your saved labels and account data are not deleted.</p>
+    <div id="status" class="status">Resetting Little Labels…</div>
+    <a id="openApp" class="go" href="./?fresh=105" style="display:none">Open Little Labels</a>
+    <button id="retry" class="again" style="display:none">Try Reset Again</button>
+  </main>
+<script>
+(async()=>{
+  const status=document.getElementById('status'),open=document.getElementById('openApp'),retry=document.getElementById('retry');
+  async function reset(){
+    status.className='status';status.textContent='Resetting Little Labels…';open.style.display='none';retry.style.display='none';
+    try{
+      if('serviceWorker' in navigator){
+        const regs=await navigator.serviceWorker.getRegistrations();
+        for(const reg of regs){
+          if(!reg.scope || reg.scope.includes('/Early-eagle-label-maker/')) await reg.unregister();
+        }
+      }
+      if('caches' in window){
+        const keys=await caches.keys();
+        await Promise.all(keys.filter(k=>/label/i.test(k)||/early-eagle/i.test(k)).map(k=>caches.delete(k)));
+      }
+      status.className='status ok';
+      status.textContent='✓ Reset complete. Open a fresh copy of Little Labels.';
+      open.href='./?fresh='+Date.now();
+      open.style.display='block';
+    }catch(err){
+      console.error(err);
+      status.className='status bad';
+      status.textContent='The reset could not finish on this browser.';
+      retry.style.display='block';
+    }
+  }
+  retry.onclick=reset;
+  await reset();
+})();
+</script>
+</body>
+</html>
