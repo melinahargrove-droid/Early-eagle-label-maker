@@ -1,0 +1,52 @@
+name: Bump Little Labels build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/bump-little-labels-build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update build references
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('?v=102', '?v=107')
+          s = s.replace('App build 102', 'App build 107')
+          s = s.replace('href="manifest.webmanifest"', 'href="manifest.webmanifest?v=107"')
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('pwa-version-fix.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('const APP_VERSION="104"', 'const APP_VERSION="107"')
+          s = s.replace('Build 104', 'Build 107')
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('manifest.webmanifest')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('"start_url":"./diagnostic-loader.html?appv=107"', '"start_url":"./?appv=107"')
+          s = s.replace('"start_url":"./?appv=102"', '"start_url":"./?appv=107"')
+          s = s.replace('?v=102', '?v=107')
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Commit build 107
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html manifest.webmanifest pwa-version-fix.js
+          if git diff --cached --quiet; then
+            echo "No changes needed"
+          else
+            git commit -m "Fix Little Labels stale script versioning (build 107)"
+            git push
+          fi
