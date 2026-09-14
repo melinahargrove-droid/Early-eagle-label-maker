@@ -1,8 +1,39 @@
-const CACHE="little-labels-v98";
-const APP_SHELL=["./","./index.html?appv=98","./manifest.webmanifest?v=98","./icon-192.png?v=98","./icon-512.png?v=98","./icon-maskable-512.png?v=98","./file_000000000f0881f5b51a1d4a0ac751b1.png?v=98","./commercial-access.js?v=98","./little-labels-admin.js?v=98","./v1-audit-polish.js?v=98","./home-grid-order.js?v=98","./onboarding-help.js?v=98","./make-list-isolated.js?v=98","./make-list-polish.js?v=98","./smart-print-layout.js?v=98","./name-labels.js?v=98","./name-labels-queue.js?v=98","./queue-library-polish.js?v=98","./little-labels-theme.js?v=98","./label-settings.js?v=98","./language-settings.js?v=98","./identification-language.js?v=98","./confirmation-cleanup.js?v=98","./type-a-label.js?v=98","./blank-input-placeholders.js?v=98","./sellable-label-wiring.js?v=98","./sellable-label-render.js?v=98","./true-size-rotation-fix.js?v=98","./background-cleanup-toggle.js?v=98","./home-settings-gear.js?v=98","./print-blank-fix.js?v=98","./pdf-print.js?v=98","./pwa-version-fix.js?v=98"];
-self.addEventListener('install',e=>{e.waitUntil((async()=>{const c=await caches.open(CACHE);await Promise.allSettled(APP_SHELL.map(u=>c.add(u)));await c.add('./index.html?appv=98').catch(()=>{});})());self.skipWaiting();});
-self.addEventListener('activate',e=>{e.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter(x=>(x.includes('label-maker-')||x.startsWith('little-labels-'))&&x!==CACHE).map(x=>caches.delete(x)));await self.clients.claim();})());});
-async function injectHotfix(r){if(!r)return r;try{let h=await r.text();for(const[n,t]of [['commercial-access.js','<script src="./commercial-access.js?v=98"></script>'],['little-labels-admin.js','<script src="./little-labels-admin.js?v=98"></script>'],['v1-audit-polish.js','<script src="./v1-audit-polish.js?v=98"></script>'],['home-grid-order.js','<script src="./home-grid-order.js?v=98"></script>'],['onboarding-help.js','<script src="./onboarding-help.js?v=98"></script>'],['make-list-isolated.js','<script src="./make-list-isolated.js?v=98"></script>'],['make-list-polish.js','<script src="./make-list-polish.js?v=98"></script>'],['smart-print-layout.js','<script src="./smart-print-layout.js?v=98"></script>'],['name-labels.js','<script src="./name-labels.js?v=98"></script>'],['name-labels-queue.js','<script src="./name-labels-queue.js?v=98"></script>'],['queue-library-polish.js','<script src="./queue-library-polish.js?v=98"></script>'],['little-labels-theme.js','<script src="./little-labels-theme.js?v=98"></script>'],['label-settings.js','<script src="./label-settings.js?v=98"></script>'],['language-settings.js','<script src="./language-settings.js?v=98"></script>'],['identification-language.js','<script src="./identification-language.js?v=98"></script>'],['confirmation-cleanup.js','<script src="./confirmation-cleanup.js?v=98"></script>'],['type-a-label.js','<script src="./type-a-label.js?v=98"></script>'],['blank-input-placeholders.js','<script src="./blank-input-placeholders.js?v=98"></script>'],['sellable-label-wiring.js','<script src="./sellable-label-wiring.js?v=98"></script>'],['sellable-label-render.js','<script src="./sellable-label-render.js?v=98"></script>'],['true-size-rotation-fix.js','<script src="./true-size-rotation-fix.js?v=98"></script>'],['background-cleanup-toggle.js','<script src="./background-cleanup-toggle.js?v=98"></script>'],['home-settings-gear.js','<script src="./home-settings-gear.js?v=98"></script>'],['print-blank-fix.js','<script src="./print-blank-fix.js?v=98"></script>'],['pdf-print.js','<script src="./pdf-print.js?v=98"></script>'],['pwa-version-fix.js','<script src="./pwa-version-fix.js?v=98"></script>']])if(!h.includes(n))h=h.replace('</body>',t+'</body>');const x=new Headers(r.headers);x.delete('content-length');return new Response(h,{status:r.status,statusText:r.statusText,headers:x});}catch{return r;}}
-async function cachedApp(){return (await caches.match('./index.html?appv=98'))||(await caches.match('./'))||Response.error();}
-async function networkWithTimeout(req,ms=2200){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),ms);try{return await fetch(req,{cache:'no-store',signal:controller.signal});}finally{clearTimeout(timer);}}
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(e.request.mode==='navigate'||u.pathname.endsWith('/index.html')){e.respondWith((async()=>{try{const net=await networkWithTimeout(e.request);const copy=net.clone();caches.open(CACHE).then(c=>c.put('./index.html?appv=98',copy)).catch(()=>{});return await injectHotfix(net);}catch{return await injectHotfix(await cachedApp());}})());return;}e.respondWith((async()=>{const cached=await caches.match(e.request);if(cached){fetch(e.request,{cache:'no-store'}).then(r=>{if(r&&r.ok)caches.open(CACHE).then(c=>c.put(e.request,r.clone()));}).catch(()=>{});return cached;}try{return await networkWithTimeout(e.request,3500);}catch{return Response.error();}})());});
+const CACHE="little-labels-v99";
+const FALLBACK_KEY="./index.html?appv=99";
+const PATCHES=[
+  "commercial-access.js","little-labels-admin.js","v1-audit-polish.js","home-grid-order.js","onboarding-help.js",
+  "make-list-isolated.js","make-list-polish.js","smart-print-layout.js","name-labels.js","name-labels-queue.js",
+  "queue-library-polish.js","little-labels-theme.js","label-settings.js","language-settings.js","identification-language.js",
+  "confirmation-cleanup.js","type-a-label.js","blank-input-placeholders.js","sellable-label-wiring.js","sellable-label-render.js",
+  "true-size-rotation-fix.js","background-cleanup-toggle.js","home-settings-gear.js","print-blank-fix.js","pdf-print.js","pwa-version-fix.js"
+];
+self.addEventListener('install',e=>{e.waitUntil((async()=>{const c=await caches.open(CACHE);try{const r=await fetch(FALLBACK_KEY,{cache:'no-store'});if(r&&r.ok)await c.put(FALLBACK_KEY,r.clone());}catch{}})());self.skipWaiting();});
+self.addEventListener('activate',e=>{e.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter(k=>(k.includes('label-maker-')||k.startsWith('little-labels-'))&&k!==CACHE).map(k=>caches.delete(k)));await self.clients.claim();})());});
+async function injectPatches(response){if(!response)return response;try{let html=await response.text();for(const name of PATCHES){if(!html.includes(name)){html=html.replace('</body>',`<script src="./${name}?v=99"></script></body>`);}}const headers=new Headers(response.headers);headers.delete('content-length');return new Response(html,{status:response.status,statusText:response.statusText,headers});}catch{return response;}}
+async function saveFallback(response){try{if(response&&response.ok){const c=await caches.open(CACHE);await c.put(FALLBACK_KEY,response.clone());}}catch{}}
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET')return;
+  const url=new URL(e.request.url);
+  if(e.request.mode==='navigate'||url.pathname.endsWith('/index.html')){
+    e.respondWith((async()=>{
+      try{
+        const network=await fetch(e.request,{cache:'no-store'});
+        saveFallback(network.clone());
+        return injectPatches(network);
+      }catch{
+        const cached=await caches.match(FALLBACK_KEY)||await caches.match('./');
+        return cached?injectPatches(cached):Response.error();
+      }
+    })());
+    return;
+  }
+  e.respondWith((async()=>{
+    try{
+      const network=await fetch(e.request,{cache:'no-store'});
+      if(network&&network.ok){const c=await caches.open(CACHE);c.put(e.request,network.clone()).catch(()=>{});}
+      return network;
+    }catch{
+      return (await caches.match(e.request))||Response.error();
+    }
+  })());
+});
