@@ -1,0 +1,114 @@
+name: Stabilize Little Labels frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/stabilize-little-labels.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  stabilize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fold current app scripts into direct page loading
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          build = '102'
+          patch_names = [
+            'commercial-access.js','little-labels-admin.js','v1-audit-polish.js','home-grid-order.js','onboarding-help.js',
+            'make-list-isolated.js','make-list-polish.js','smart-print-layout.js','name-labels.js','name-labels-queue.js',
+            'queue-library-polish.js','little-labels-theme.js','label-settings.js','language-settings.js','identification-language.js',
+            'confirmation-cleanup.js','type-a-label.js','blank-input-placeholders.js','sellable-label-wiring.js','sellable-label-render.js',
+            'true-size-rotation-fix.js','background-cleanup-toggle.js','home-settings-gear.js','print-blank-fix.js','pdf-print.js','pwa-version-fix.js'
+          ]
+
+          p = Path('index.html')
+          html = p.read_text(encoding='utf-8')
+
+          # Remove the legacy build-32 service-worker bootstrap that kept resetting the app.
+          html = re.sub(
+            r'\nif\("serviceWorker" in navigator\)\{.*?\n\}\n</script>',
+            '\n</script>',
+            html,
+            flags=re.S,
+          )
+
+          # Remove any previously inserted direct patch block before rebuilding it.
+          html = re.sub(r'\n<!-- LITTLE_LABELS_DIRECT_PATCHES_START -->.*?<!-- LITTLE_LABELS_DIRECT_PATCHES_END -->\n', '\n', html, flags=re.S)
+          direct = '\n<!-- LITTLE_LABELS_DIRECT_PATCHES_START -->\n' + '\n'.join(
+            f'<script src="./{name}?v={build}"></script>' for name in patch_names
+          ) + '\n<!-- LITTLE_LABELS_DIRECT_PATCHES_END -->\n'
+          html = html.replace('</body>', direct + '</body>')
+          html = html.replace('App build 32', f'App build {build}')
+          html = html.replace('<title>Early Eagle Label Maker</title>', '<title>Little Labels</title>')
+          html = html.replace('content="Early Eagle Label Maker"', 'content="Little Labels"')
+          html = html.replace('content="Early Eagle Labels"', 'content="Little Labels"')
+          p.write_text(html, encoding='utf-8')
+
+          # The page now loads the current scripts directly. This file only removes legacy workers/caches once.
+          Path('pwa-version-fix.js').write_text(r'''(()=>{
+            const APP_VERSION="102";
+            const FLAG=`little_labels_direct_bootstrap_${APP_VERSION}`;
+            function updateVisibleBuild(){
+              document.querySelectorAll('.footer-note span').forEach(el=>{
+                if(/App build\s+\d+/i.test(el.textContent||'')) el.textContent=`App build ${APP_VERSION}`;
+              });
+            }
+            async function retireLegacyWorker(){
+              updateVisibleBuild();
+              if(sessionStorage.getItem(FLAG)) return;
+              sessionStorage.setItem(FLAG,'1');
+              try{
+                if('serviceWorker' in navigator){
+                  const regs=await navigator.serviceWorker.getRegistrations();
+                  for(const reg of regs){ try{await reg.unregister();}catch{} }
+                }
+                if('caches' in window){
+                  const keys=await caches.keys();
+                  await Promise.all(keys.filter(k=>k.includes('label-maker-')||k.startsWith('little-labels-')).map(k=>caches.delete(k)));
+                }
+                const u=new URL(location.href);
+                if(u.searchParams.get('appv')!==APP_VERSION){
+                  u.searchParams.set('appv',APP_VERSION);
+                  location.replace(u.toString());
+                }
+              }catch(err){ console.warn('Legacy PWA cleanup failed:',err); }
+            }
+            if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',updateVisibleBuild,{once:true}); else updateVisibleBuild();
+            addEventListener('load',()=>setTimeout(retireLegacyWorker,100));
+          })();\n''', encoding='utf-8')
+
+          # Keep the old service-worker URL harmless if an installed copy asks for it during migration.
+          Path('service-worker.js').write_text(r'''self.addEventListener('install',()=>self.skipWaiting());
+          self.addEventListener('activate',event=>event.waitUntil((async()=>{
+            try{
+              const keys=await caches.keys();
+              await Promise.all(keys.filter(k=>k.includes('label-maker-')||k.startsWith('little-labels-')).map(k=>caches.delete(k)));
+            }catch{}
+            await self.clients.claim();
+            try{await self.registration.unregister();}catch{}
+          })()));
+          // Build 102: no fetch interception. GitHub Pages serves Little Labels directly.
+          ''', encoding='utf-8')
+
+          m = Path('manifest.webmanifest')
+          text = m.read_text(encoding='utf-8')
+          text = re.sub(r'appv=\d+', f'appv={build}', text)
+          text = re.sub(r'\?v=\d+', f'?v={build}', text)
+          m.write_text(text, encoding='utf-8')
+
+      - name: Commit stabilized frontend
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html pwa-version-fix.js service-worker.js manifest.webmanifest
+          git diff --cached --quiet && exit 0
+          git commit -m "Stabilize Little Labels direct frontend loading (build 102)"
+          git push
