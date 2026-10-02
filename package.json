@@ -1,0 +1,19 @@
+{
+  "name": "little-labels",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "node tests/workflows-dom.cjs && node tests/packing.cjs . && node tests/pdf-rotation.cjs && node tests/name-startup.cjs",
+    "test:browser": "node tests/workflows.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/melinahargrove-droid/Early-eagle-label-maker.git"
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "jsdom": "26.1.0"
+  },
+  "private": true
+}

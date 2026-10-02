@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eff6ff">
   <title>Little Labels</title>
-  <link rel="manifest" href="manifest.webmanifest?v=107">
+  <link rel="manifest" href="manifest.webmanifest?v=108">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -281,7 +281,7 @@
       <button class="home-manage print" id="queueBtn"><span class="home-manage-icon">🖨️</span><span>Ready to Print</span><span class="home-count" id="queueCount">0</span></button>
       <button class="home-manage labels" id="libraryBtn"><span class="home-manage-icon">🏷️</span><span>My Labels</span></button>
     </div>
-    <div class="home-account"><div class="home-sync"><span class="home-sync-dot"></span><span>Synced</span></div><div id="accountStatusText" class="home-email">Private device session</div><button id="accountBtn" class="soft">Account</button></div>
+    <div class="home-account"><div class="home-sync"><span class="home-sync-dot"></span><span id="homeSyncStatus" role="status">Connecting…</span></div><div id="accountStatusText" class="home-email">Private device session</div><button id="accountBtn" class="soft">Account</button></div>
     <div id="cloudStatus" class="status loading hidden">Connecting your saved label queue…</div><div id="accountStatusSub" class="tiny hidden"></div>
   </section>
 
@@ -601,7 +601,7 @@
     </div>
   </section>
 
-  <p class="footer-note">Your print queue and label library are saved in Supabase. Labels stay in Ready to Print until you mark them printed.<br><span style="opacity:.65">App build 107</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 108</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -614,6 +614,25 @@ const SUPABASE_URL = "https://ctmqvbsjliinlddfolti.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AYbs6V2u0qPo-jLTkTFlBQ_1ps7DaZC";
 const SESSION_STORAGE_KEY = "eea_label_maker_supabase_session_v1";
 let cloudReady = false;
+let pendingSyncRequests=0,pendingSyncWrites=0,syncErrorVersion=0,syncFailed=false,cloudLoaded=false,cloudLoadedOwner=null;
+const failedSyncWrites=new Set();
+let syncOwner=null,syncGeneration=0;
+function ensureSyncOwner(){
+  const owner=currentUser?.id||null;
+  if(syncOwner!==owner){syncOwner=owner;syncGeneration++;pendingSyncRequests=0;pendingSyncWrites=0;failedSyncWrites.clear();syncFailed=false;cloudLoaded=cloudReady&&cloudLoadedOwner===owner;}
+}
+function refreshSyncStatus(){
+  ensureSyncOwner();
+  updateSyncStatus((syncFailed||failedSyncWrites.size)?'Sync unavailable':pendingSyncWrites?'Saving…':pendingSyncRequests?'Syncing…':cloudReady&&cloudLoaded?'Cloud connected':'Session only');
+}
+function updateSyncStatus(state){
+  const text=document.getElementById('homeSyncStatus');
+  if(text) text.textContent=state;
+  const dot=document.querySelector('.home-sync-dot');
+  if(dot) dot.style.background=state==='Cloud connected'?'#59846b':'#b78c54';
+  const sub=document.getElementById('accountStatusSub');
+  if(sub && typeof currentUser!=='undefined' && userIsPermanent(currentUser))sub.textContent=state==='Cloud connected'?'Cloud saving is connected':'Cloud saving has not finished; keep this page open';
+}
 let currentUser = null;
 let cloudSession = null;
 let backgroundRemover = null;
@@ -665,7 +684,13 @@ function setAuthStatus(id,text,cls){
   el.classList.remove("hidden");
 }
 
+let lastUIOwner=null;
 function updateAccountUI(){
+  const owner=currentUser?.id||null;
+  ensureSyncOwner();
+  if(owner!==lastUIOwner){lastUIOwner=owner;document.dispatchEvent(new CustomEvent('little-label-account-changed'));}
+  refreshSyncStatus();
+
   const permanent=userIsPermanent(currentUser);
   const email=currentUser?.email || "";
 
@@ -675,7 +700,7 @@ function updateAccountUI(){
 
   if(permanent){
     $("accountStatusText").textContent=email || "Signed in";
-    $("accountStatusSub").textContent="Synced across your devices";
+    $("accountStatusSub").textContent=(cloudReady&&cloudLoaded&&!syncFailed&&!failedSyncWrites.size&&!pendingSyncRequests)?"Cloud saving is connected":"Cloud saving has not finished; keep this page open";
     $("accountBtn").textContent="Account";
     $("accountCurrent").textContent=`✓ Signed in as ${email}`;
     $("accountCurrent").className="status ok";
@@ -967,6 +992,12 @@ async function ensureCloudSession(){
   return await createAnonymousSession();
 }
 async function restFetch(path,options={},retry=true){
+  const writing=!!options.method && options.method!=="GET";
+  ensureSyncOwner();
+  const requestOwner=currentUser?.id,requestGeneration=syncGeneration;
+  const writeKey=writing?path+'|'+(options.body||''):null;
+  pendingSyncRequests++;if(writing)pendingSyncWrites++;refreshSyncStatus();
+  try{
   if(!cloudSession?.access_token) throw new Error("No Supabase session is available.");
   const headers={
     "apikey":SUPABASE_PUBLISHABLE_KEY,
@@ -985,7 +1016,10 @@ async function restFetch(path,options={},retry=true){
     const msg=data?.message || data?.hint || data?.details || data?.error || `Supabase data error (${res.status})`;
     throw new Error(msg);
   }
+  if(writing&&requestGeneration===syncGeneration)failedSyncWrites.delete(writeKey);
   return data;
+  }catch(err){if(currentUser?.id===requestOwner&&requestGeneration===syncGeneration){if(writing)failedSyncWrites.add(writeKey);syncFailed=true;syncErrorVersion++;}throw err;}
+  finally{if(requestGeneration===syncGeneration){pendingSyncRequests--;if(writing)pendingSyncWrites--;}refreshSyncStatus();}
 }
 async function initCloud(){
   const status = $("cloudStatus");
@@ -1001,16 +1035,21 @@ async function initCloud(){
   }catch(err){
     console.error("Supabase startup error:",err);
     cloudReady=false;
+    updateSyncStatus("Session only");
+    updateAccountUI();
     status.className="status error";
     status.textContent="Cloud saving couldn't connect: "+(err?.message||"unknown error")+". The app will still work for this session.";
   }
 }
 async function loadCloudData(){
   if(!cloudReady) return;
+  ensureSyncOwner();
+  const loadingUserId=currentUser?.id,errorAtStart=syncErrorVersion,loadGeneration=syncGeneration;
   const [qData,lData]=await Promise.all([
     restFetch("print_queue?select=*&printed_at=is.null&order=created_at.asc"),
     restFetch("labels?select=*&order=created_at.desc")
   ]);
+  if(!cloudReady || currentUser?.id!==loadingUserId || loadGeneration!==syncGeneration) return;
   queue=(qData||[]).map(x=>({
     id:x.id,label_id:x.label_id,english:x.english,spanish:x.spanish,
     photo:x.photo_data||"",size:x.size,created_at:x.created_at
@@ -1020,6 +1059,9 @@ async function loadCloudData(){
   }));
   refreshQueue();
   refreshLibrary();
+  cloudLoaded=true;cloudLoadedOwner=currentUser?.id||null;
+  if(syncErrorVersion===errorAtStart)syncFailed=false;
+  refreshSyncStatus();
 }
 async function prepareCloudPhoto(dataUrl){
   if(!dataUrl) return "";
@@ -1079,6 +1121,12 @@ let printLayoutPages = [];
 
 
 function show(id){
+  if(id==='account'||id==='passwordRecovery'){
+    // Dismiss creation/help layers, never the purchase/activation gate.
+    const overlays={mlIsolated:'mli-hidden',nameLabelsOverlay:'hide',typeLabelOverlay:'tl-hidden',llSettings:'lls-hidden',llHelp:'llh-hidden',llAdmin:'lla-hidden'};
+    Object.entries(overlays).forEach(([key,hiddenClass])=>document.getElementById(key)?.classList.add(hiddenClass));
+    document.getElementById('llWelcome')?.remove();
+  }
   sections.forEach(s => $(s).classList.toggle("hidden", s !== id));
   window.scrollTo({top:0, behavior:"smooth"});
 }
@@ -2857,32 +2905,33 @@ updateSetSummary();
 </script>
 
 <!-- LITTLE_LABELS_DIRECT_PATCHES_START -->
-<script src="./commercial-access.js?v=107"></script>
-<script src="./little-labels-admin.js?v=107"></script>
-<script src="./v1-audit-polish.js?v=107"></script>
-<script src="./home-grid-order.js?v=107"></script>
-<script src="./onboarding-help.js?v=107"></script>
-<script src="./make-list-isolated.js?v=107"></script>
-<script src="./make-list-polish.js?v=107"></script>
-<script src="./smart-print-layout.js?v=107"></script>
-<script src="./name-labels.js?v=107"></script>
-<script src="./name-labels-queue.js?v=107"></script>
-<script src="./queue-library-polish.js?v=107"></script>
-<script src="./little-labels-theme.js?v=107"></script>
-<script src="./label-settings.js?v=107"></script>
-<script src="./language-settings.js?v=107"></script>
-<script src="./identification-language.js?v=107"></script>
-<script src="./confirmation-cleanup.js?v=107"></script>
-<script src="./type-a-label.js?v=107"></script>
-<script src="./blank-input-placeholders.js?v=107"></script>
-<script src="./sellable-label-wiring.js?v=107"></script>
-<script src="./sellable-label-render.js?v=107"></script>
-<script src="./true-size-rotation-fix.js?v=107"></script>
-<script src="./background-cleanup-toggle.js?v=107"></script>
-<script src="./home-settings-gear.js?v=107"></script>
-<script src="./print-blank-fix.js?v=107"></script>
-<script src="./pdf-print.js?v=107"></script>
-<script src="./pwa-version-fix.js?v=107"></script>
+<script src="./commercial-access.js?v=108"></script>
+<script src="./little-labels-admin.js?v=108"></script>
+<script src="./v1-audit-polish.js?v=108"></script>
+<script src="./home-grid-order.js?v=108"></script>
+<script src="./onboarding-help.js?v=108"></script>
+<script src="./label-workflow-save.js?v=108"></script>
+<script src="./make-list-isolated.js?v=108"></script>
+<script src="./make-list-polish.js?v=108"></script>
+<script src="./smart-print-layout.js?v=108"></script>
+<script src="./name-labels.js?v=108"></script>
+<script src="./name-labels-queue.js?v=108"></script>
+<script src="./queue-library-polish.js?v=108"></script>
+<script src="./little-labels-theme.js?v=108"></script>
+<script src="./label-settings.js?v=108"></script>
+<script src="./language-settings.js?v=108"></script>
+<script src="./identification-language.js?v=108"></script>
+<script src="./confirmation-cleanup.js?v=108"></script>
+<script src="./type-a-label.js?v=108"></script>
+<script src="./blank-input-placeholders.js?v=108"></script>
+<script src="./sellable-label-wiring.js?v=108"></script>
+<script src="./sellable-label-render.js?v=108"></script>
+<script src="./true-size-rotation-fix.js?v=108"></script>
+<script src="./background-cleanup-toggle.js?v=108"></script>
+<script src="./home-settings-gear.js?v=108"></script>
+<script src="./print-blank-fix.js?v=108"></script>
+<script src="./pdf-print.js?v=108"></script>
+<script src="./pwa-version-fix.js?v=108"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>
