@@ -9,7 +9,8 @@
    const c=document.createElement('canvas');c.width=Math.round(PAGE_W*DPI);c.height=Math.round(PAGE_H*DPI);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
    for(const item of page){
      const raster=await rasterizeFinishedLabel(item);const img=await load(raster);const px=item.x*DPI,py=item.y*DPI,pw=item._w*DPI,ph=item._h*DPI;
-     if(item._rotated){x.save();x.translate(px+pw/2,py+ph/2);x.rotate(Math.PI/2);x.drawImage(img,-ph/2,-pw/2,ph,pw);x.restore()}else{x.drawImage(img,px,py,pw,ph)}
+     // rasterizeFinishedLabel already applies the packing rotation.
+     x.drawImage(img,px,py,pw,ph);
      if(showCuts){x.save();x.strokeStyle='#7a8792';x.lineWidth=1.4;x.setLineDash([6,5]);x.strokeRect(px+.7,py+.7,pw-1.4,ph-1.4);x.restore()}
    }
    return c.toDataURL('image/jpeg',.96);
