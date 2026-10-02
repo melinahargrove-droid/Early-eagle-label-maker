@@ -1,0 +1,341 @@
+{
+  "columns": [
+    {
+      "data_type": "uuid",
+      "table_name": "labels",
+      "column_name": "id",
+      "is_nullable": "NO",
+      "column_default": "gen_random_uuid()"
+    },
+    {
+      "data_type": "uuid",
+      "table_name": "labels",
+      "column_name": "user_id",
+      "is_nullable": "NO",
+      "column_default": "auth.uid()"
+    },
+    {
+      "data_type": "text",
+      "table_name": "labels",
+      "column_name": "english",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "data_type": "text",
+      "table_name": "labels",
+      "column_name": "spanish",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "data_type": "text",
+      "table_name": "labels",
+      "column_name": "photo_data",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "data_type": "timestamp with time zone",
+      "table_name": "labels",
+      "column_name": "created_at",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "data_type": "uuid",
+      "table_name": "little_labels_admins",
+      "column_name": "user_id",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "data_type": "timestamp with time zone",
+      "table_name": "little_labels_admins",
+      "column_name": "created_at",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "data_type": "uuid",
+      "table_name": "little_labels_entitlements",
+      "column_name": "id",
+      "is_nullable": "NO",
+      "column_default": "gen_random_uuid()"
+    },
+    {
+      "data_type": "text",
+      "table_name": "little_labels_entitlements",
+      "column_name": "activation_code",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "data_type": "text",
+      "table_name": "little_labels_entitlements",
+      "column_name": "purchaser_email",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "data_type": "text",
+      "table_name": "little_labels_entitlements",
+      "column_name": "source",
+      "is_nullable": "NO",
+      "column_default": "'tpt'::text"
+    },
+    {
+      "data_type": "text",
+      "table_name": "little_labels_entitlements",
+      "column_name": "status",
+      "is_nullable": "NO",
+      "column_default": "'available'::text"
+    },
+    {
+      "data_type": "uuid",
+      "table_name": "little_labels_entitlements",
+      "column_name": "activated_by",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "data_type": "timestamp with time zone",
+      "table_name": "little_labels_entitlements",
+      "column_name": "activated_at",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "data_type": "timestamp with time zone",
+      "table_name": "little_labels_entitlements",
+      "column_name": "created_at",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "data_type": "uuid",
+      "table_name": "print_queue",
+      "column_name": "id",
+      "is_nullable": "NO",
+      "column_default": "gen_random_uuid()"
+    },
+    {
+      "data_type": "uuid",
+      "table_name": "print_queue",
+      "column_name": "user_id",
+      "is_nullable": "NO",
+      "column_default": "auth.uid()"
+    },
+    {
+      "data_type": "uuid",
+      "table_name": "print_queue",
+      "column_name": "label_id",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "data_type": "text",
+      "table_name": "print_queue",
+      "column_name": "english",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "data_type": "text",
+      "table_name": "print_queue",
+      "column_name": "spanish",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "data_type": "text",
+      "table_name": "print_queue",
+      "column_name": "photo_data",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "data_type": "text",
+      "table_name": "print_queue",
+      "column_name": "size",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "data_type": "timestamp with time zone",
+      "table_name": "print_queue",
+      "column_name": "created_at",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "data_type": "timestamp with time zone",
+      "table_name": "print_queue",
+      "column_name": "printed_at",
+      "is_nullable": "YES",
+      "column_default": null
+    }
+  ],
+  "constraints": [
+    {
+      "conname": "labels_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "labels"
+    },
+    {
+      "conname": "little_labels_admins_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (user_id)",
+      "table_name": "little_labels_admins"
+    },
+    {
+      "conname": "little_labels_admins_user_id_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "table_name": "little_labels_admins"
+    },
+    {
+      "conname": "little_labels_entitlements_activated_by_fkey",
+      "contype": "f",
+      "definition": "FOREIGN KEY (activated_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "little_labels_entitlements"
+    },
+    {
+      "conname": "little_labels_entitlements_activation_code_key",
+      "contype": "u",
+      "definition": "UNIQUE (activation_code)",
+      "table_name": "little_labels_entitlements"
+    },
+    {
+      "conname": "little_labels_entitlements_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "little_labels_entitlements"
+    },
+    {
+      "conname": "little_labels_entitlements_status_check",
+      "contype": "c",
+      "definition": "CHECK ((status = ANY (ARRAY['available'::text, 'activated'::text, 'disabled'::text])))",
+      "table_name": "little_labels_entitlements"
+    },
+    {
+      "conname": "print_queue_pkey",
+      "contype": "p",
+      "definition": "PRIMARY KEY (id)",
+      "table_name": "print_queue"
+    }
+  ],
+  "policies": [
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "labels",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can add their own labels",
+      "schemaname": "public",
+      "with_check": "(auth.uid() = user_id)"
+    },
+    {
+      "cmd": "DELETE",
+      "qual": "(auth.uid() = user_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "labels",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can delete their own labels",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "(auth.uid() = user_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "labels",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can update their own labels",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "(auth.uid() = user_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "labels",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can view their own labels",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "tablename": "print_queue",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can add to their own print queue",
+      "schemaname": "public",
+      "with_check": "(auth.uid() = user_id)"
+    },
+    {
+      "cmd": "DELETE",
+      "qual": "(auth.uid() = user_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "print_queue",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can delete from their own print queue",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "(auth.uid() = user_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "print_queue",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can update their own print queue",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "(auth.uid() = user_id)",
+      "roles": [
+        "public"
+      ],
+      "tablename": "print_queue",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can view their own print queue",
+      "schemaname": "public",
+      "with_check": null
+    }
+  ],
+  "functions": [
+    {
+      "proname": "activate_little_labels",
+      "definition": "CREATE OR REPLACE FUNCTION public.activate_little_labels(code_input text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  uid uuid := auth.uid();\n  row_rec public.little_labels_entitlements%rowtype;\nbegin\n  if uid is null then\n    return jsonb_build_object('success', false, 'error', 'Sign in first.');\n  end if;\n\n  select * into row_rec\n  from public.little_labels_entitlements\n  where activation_code = upper(trim(code_input))\n  for update;\n\n  if not found then\n    return jsonb_build_object('success', false, 'error', 'That activation code was not found.');\n  end if;\n\n  if row_rec.status = 'disabled' then\n    return jsonb_build_object('success', false, 'error', 'That activation code is no longer active.');\n  end if;\n\n  if row_rec.status = 'activated' and row_rec.activated_by is distinct from uid then\n    return jsonb_build_object('success', false, 'error', 'That activation code has already been used.');\n  end if;\n\n  if row_rec.status = 'available' then\n    update public.little_labels_entitlements\n    set status = 'activated', activated_by = uid, activated_at = now()\n    where id = row_rec.id;\n  end if;\n\n  return jsonb_build_object('success', true, 'active', true);\nend;\n$function$\n",
+      "anon_execute": false,
+      "authenticated_execute": true
+    },
+    {
+      "proname": "little_labels_access_status",
+      "definition": "CREATE OR REPLACE FUNCTION public.little_labels_access_status()\n RETURNS jsonb\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select jsonb_build_object(\n    'active', exists(\n      select 1 from public.little_labels_entitlements\n      where activated_by = auth.uid() and status = 'activated'\n    )\n  );\n$function$\n",
+      "anon_execute": false,
+      "authenticated_execute": true
+    }
+  ]
+}

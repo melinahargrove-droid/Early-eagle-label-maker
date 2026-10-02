@@ -601,7 +601,7 @@
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 109</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 110</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -1355,7 +1355,7 @@ async function identify(){
   setStatus("✨ Identifying the classroom material…","loading");
   $("retryIdentify").classList.add("hidden");
   try{
-    const response = await fetch(FUNCTION_URL,{
+    const response = await littleLabelsAIFetch(FUNCTION_URL,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({imageDataUrl:photoDataUrl})
@@ -1407,7 +1407,7 @@ async function autoTranslateEnglish(){
   status.textContent="Translating Spanish…";
 
   try{
-    const response = await fetch(TRANSLATE_URL,{
+    const response = await littleLabelsAIFetch(TRANSLATE_URL,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({english})
@@ -2278,7 +2278,7 @@ function setBatchProgress(text,cls="loading"){
 }
 
 async function callBatchFunction(payload){
-  const response=await fetch(BATCH_LABELS_URL,{
+  const response=await littleLabelsAIFetch(BATCH_LABELS_URL,{
     method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify(payload)
@@ -2380,7 +2380,7 @@ async function translateBatchItem(index, englishInput, spanishInput, status){
   status.textContent="Translating Spanish…";
 
   try{
-    const response=await fetch(TRANSLATE_URL,{
+    const response=await littleLabelsAIFetch(TRANSLATE_URL,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({english})
@@ -2908,13 +2908,14 @@ updateSetSummary();
 </script>
 
 <!-- LITTLE_LABELS_DIRECT_PATCHES_START -->
+<script src="./ai-client.js?v=110"></script>
 <script src="./commercial-access.js?v=109"></script>
 <script src="./little-labels-admin.js?v=108"></script>
 <script src="./v1-audit-polish.js?v=108"></script>
 <script src="./home-grid-order.js?v=108"></script>
 <script src="./onboarding-help.js?v=108"></script>
 <script src="./label-workflow-save.js?v=108"></script>
-<script src="./make-list-isolated.js?v=108"></script>
+<script src="./make-list-isolated.js?v=110"></script>
 <script src="./make-list-polish.js?v=108"></script>
 <script src="./smart-print-layout.js?v=108"></script>
 <script src="./name-labels.js?v=108"></script>
@@ -2922,10 +2923,10 @@ updateSetSummary();
 <script src="./queue-library-polish.js?v=108"></script>
 <script src="./little-labels-theme.js?v=108"></script>
 <script src="./label-settings.js?v=108"></script>
-<script src="./language-settings.js?v=108"></script>
+<script src="./language-settings.js?v=110"></script>
 <script src="./identification-language.js?v=108"></script>
 <script src="./confirmation-cleanup.js?v=108"></script>
-<script src="./type-a-label.js?v=108"></script>
+<script src="./type-a-label.js?v=110"></script>
 <script src="./blank-input-placeholders.js?v=108"></script>
 <script src="./sellable-label-wiring.js?v=108"></script>
 <script src="./sellable-label-render.js?v=108"></script>
@@ -2934,7 +2935,7 @@ updateSetSummary();
 <script src="./home-settings-gear.js?v=108"></script>
 <script src="./print-blank-fix.js?v=108"></script>
 <script src="./pdf-print.js?v=108"></script>
-<script src="./pwa-version-fix.js?v=109"></script>
+<script src="./pwa-version-fix.js?v=110"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>
