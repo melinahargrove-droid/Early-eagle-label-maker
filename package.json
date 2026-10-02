@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "node tests/workflows-dom.cjs && node tests/packing.cjs . && node tests/pdf-rotation.cjs && node tests/name-startup.cjs && node tests/access-state.cjs",
-    "test:browser": "node tests/workflows.cjs && node tests/activation-browser.cjs"
+    "test": "node tests/workflows-dom.cjs && node tests/packing.cjs . && node tests/pdf-rotation.cjs && node tests/name-startup.cjs && node tests/access-state.cjs && npm run test:security",
+    "test:browser": "node tests/workflows.cjs && node tests/activation-browser.cjs",
+    "test:security": "node tests/ai-client.cjs && node tests/edge-access.cjs && node tests/database-access.cjs"
   },
   "repository": {
     "type": "git",
@@ -12,6 +13,7 @@
   },
   "type": "commonjs",
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@playwright/test": "1.58.2",
     "jsdom": "26.1.0"
   },

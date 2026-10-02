@@ -1,0 +1,17 @@
+project_id = "little-labels"
+
+[functions.identify-material]
+verify_jwt = true
+
+[functions.translate-label]
+verify_jwt = true
+
+[functions.batch-labels]
+verify_jwt = true
+
+[functions.batch-wording]
+verify_jwt = true
+
+[functions.label-picture]
+verify_jwt = true
+
