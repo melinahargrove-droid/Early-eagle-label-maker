@@ -33,7 +33,7 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
       page.setDefaultTimeout(5000);
       const model = {
         session: session(options.user || anonymous('synthetic-anonymous')),
-        statusCalls: [], activationCalls: [], authCalls: [], cloudCalls: [], blocked: [], errors: [], purchased: !!options.purchased
+        statusCalls: [], activationCalls: [], adminStatusCalls: [], authCalls: [], cloudCalls: [], blocked: [], errors: [], purchased: !!options.purchased
       };
       await context.addInitScript(({ key, stored }) => {
         localStorage.setItem('littleLabelsWelcomeSeenV1', '1');
@@ -59,6 +59,10 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
           if (result.success) model.purchased = true;
           return json(result.body || result, result.httpStatus || 200);
         }
+        if (url.pathname === '/rest/v1/rpc/little_labels_admin_status') {
+          model.adminStatusCalls.push(record);
+          return json({ is_admin: false });
+        }
         if (url.pathname.startsWith('/auth/')) {
           model.authCalls.push(record);
           if (options.authDelay) await options.authDelay.promise;
@@ -68,7 +72,10 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
           if (url.pathname.endsWith('/user')) return json({ user: model.session.user });
           return json(model.session);
         }
-        if (url.pathname.startsWith('/rest/v1/')) { model.cloudCalls.push(record); return json([]); }
+        if (['/rest/v1/labels', '/rest/v1/print_queue'].includes(url.pathname)) {
+          model.cloudCalls.push(record);
+          return json([]);
+        }
         // Includes all AI, storage, and other cloud paths. Unexpected requests
         // fail the scenario rather than contacting any live service.
         model.blocked.push(request.url());
@@ -84,6 +91,7 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
           assert.deepEqual(model.errors, [], 'no uncaught browser errors');
           assert.equal(model.blocked.filter(url => url.includes('.supabase.co/')).length, 0, 'no unexpected AI or other cloud requests');
           assert.ok(model.cloudCalls.every(call => call.method === 'GET'), 'account tests never write label data');
+          assert.ok(model.adminStatusCalls.every(call => call.method === 'POST' && Object.keys(call.body || {}).length === 0), 'only the modeled read-only admin status RPC is allowed');
           await context.close();
         }
       };
