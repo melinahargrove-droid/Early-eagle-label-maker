@@ -601,7 +601,7 @@
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 108</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 109</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -691,6 +691,7 @@ function updateAccountUI(){
   if(owner!==lastUIOwner){lastUIOwner=owner;document.dispatchEvent(new CustomEvent('little-label-account-changed'));}
   refreshSyncStatus();
 
+  document.dispatchEvent(new CustomEvent('little-label-auth-updated'));
   const permanent=userIsPermanent(currentUser);
   const email=currentUser?.email || "";
 
@@ -1128,6 +1129,8 @@ function show(id){
     document.getElementById('llWelcome')?.remove();
   }
   sections.forEach(s => $(s).classList.toggle("hidden", s !== id));
+  // Account and password recovery stay available; every return rechecks purchase access.
+  window.LittleLabelsAccess?.onNavigate(id);
   window.scrollTo({top:0, behavior:"smooth"});
 }
 function dataUrlFromFile(file){
@@ -2905,7 +2908,7 @@ updateSetSummary();
 </script>
 
 <!-- LITTLE_LABELS_DIRECT_PATCHES_START -->
-<script src="./commercial-access.js?v=108"></script>
+<script src="./commercial-access.js?v=109"></script>
 <script src="./little-labels-admin.js?v=108"></script>
 <script src="./v1-audit-polish.js?v=108"></script>
 <script src="./home-grid-order.js?v=108"></script>
@@ -2931,7 +2934,7 @@ updateSetSummary();
 <script src="./home-settings-gear.js?v=108"></script>
 <script src="./print-blank-fix.js?v=108"></script>
 <script src="./pdf-print.js?v=108"></script>
-<script src="./pwa-version-fix.js?v=108"></script>
+<script src="./pwa-version-fix.js?v=109"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>
