@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
  await new Promise(r=>server.on('listening',r));
  const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
  try {
- const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.dismiss());
+ const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.stack||e.message));page.on('dialog',d=>d.dismiss());
  await page.route('**/*',route=>{const url=route.request().url();if(url.startsWith('http://127.0.0.1:'))return route.continue();if(url.includes('.supabase.co/')){const body=url.includes('/auth/')?{access_token:'synthetic-test-token',refresh_token:'synthetic-refresh',expires_in:3600,user:{id:'synthetic-owner',email:'synthetic@example.invalid',is_anonymous:false,identities:[{}]}}:url.includes('/rpc/')?{active:true}:[];return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)})}return route.abort()});
  await page.goto(`http://127.0.0.1:${server.address().port}/`);
  await page.waitForFunction(()=>window.LittleLabelWorkflowSave&&window.NLStudents&&cloudReady);
