@@ -18,3 +18,10 @@ jobs:
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - run: node tests/pdf-browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-pdf-visual-qa
+          path: test-results/
+          if-no-files-found: ignore
