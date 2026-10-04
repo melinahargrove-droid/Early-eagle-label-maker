@@ -1,5 +1,5 @@
 (()=>{
-  const APP_VERSION="110";
+  const APP_VERSION="111";
 
   function updateVisibleBuild(){
     document.querySelectorAll('.footer-note span').forEach(el=>{

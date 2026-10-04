@@ -24,7 +24,43 @@
   function setSummary(){const box=document.getElementById('setSummary');if(!box)return;let sizes=[],name='';if(chosen.mode==='single'){const id=document.getElementById('singleSize')?.value;const m=meta()[id];if(m){sizes=[sizeString(id)];name='1 label'}}else{const set=eligibleSets().find(s=>s.id===chosen.id)||eligibleSets()[0];if(set){chosen.id=set.id;sizes=sizesFromSet(set);name=set.name}}box.innerHTML=`<strong>${name||'Choose a label set'}</strong>${sizes.length?'<br>'+sizes.map(s=>s.replace(' · ',' — ')).join('<br>'):''}`}
   function renderCreateChoices(){const sec=document.getElementById('sets');if(!sec)return;sec.querySelectorAll(':scope .choice[data-set]').forEach(x=>x.style.display='none');let wrap=document.getElementById('llDynamicSets');const singleWrap=document.getElementById('singleSizeWrap');if(!wrap){wrap=document.createElement('div');wrap.id='llDynamicSets';singleWrap?.before(wrap)}wrap.innerHTML='';const sets=eligibleSets();if(chosen.mode==='set'&&!sets.some(s=>s.id===chosen.id))chosen.id=sets[0]?.id||null;sets.forEach(set=>{const d=document.createElement('div');d.className='choice ll-dynamic-choice'+(chosen.mode==='set'&&chosen.id===set.id?' selected':'');d.innerHTML=`<strong>${set.name}</strong><span>${(set.items||[]).map(([id,q])=>`${q} × ${meta()[id]?.name||id}`).join(' + ')}</span>`;d.onclick=()=>{chosen={mode:'set',id:set.id};renderCreateChoices();setSummary()};wrap.append(d)});const one=document.createElement('div');one.className='choice ll-dynamic-choice'+(chosen.mode==='single'?' selected':'');one.innerHTML='<strong>Just One Label</strong><span>Choose from your enabled label sizes</span>';one.onclick=()=>{chosen={mode:'single',id:null};renderCreateChoices();setSummary()};wrap.append(one);if(singleWrap){singleWrap.classList.toggle('hidden',chosen.mode!=='single');const sel=document.getElementById('singleSize');if(sel){const old=sel.value;sel.innerHTML='';enabledIds().forEach(id=>{const o=document.createElement('option');o.value=id;o.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;sel.append(o)});if(enabledIds().includes(old))sel.value=old;sel.onchange=setSummary}}const p=sec.querySelector('.card>p.muted');if(p)p.textContent='Choose one of your saved sets, or make just one label.';setSummary()}
 
-  async function saveCurrent(sizes){const btn=document.getElementById('addToQueue'),old=btn.textContent;btn.disabled=true;btn.textContent='Saving…';try{const english=document.getElementById('englishInput').value.trim()||'Material',spanish=document.getElementById('spanishInput').value.trim()||'',storedPhoto=await prepareCloudPhoto(activePhotoDataUrl||photoDataUrl);if(cloudReady){let label=library.find(x=>(x.english||'').toLowerCase()===english.toLowerCase()&&(x.spanish||'').toLowerCase()===spanish.toLowerCase());if(!label){const rows=await restFetch('labels',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({english,spanish,photo_data:storedPhoto})});const s=rows?.[0];if(!s)throw new Error('Saved label was not returned.');label={id:s.id,english:s.english,spanish:s.spanish,photo:s.photo_data||''}}await restFetch('print_queue',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(sizes.map(size=>({label_id:label.id,english,spanish,photo_data:storedPhoto,size})))});await loadCloudData()}else{const base={english,spanish,photo:storedPhoto};sizes.forEach(size=>queue.push({...base,size,id:crypto.randomUUID()}));if(!library.some(x=>x.english===english&&x.spanish===spanish))library.push(base);refreshQueue();refreshLibrary()}show('queue')}catch(err){console.error(err);alert("I couldn't save this label to Ready to Print. Please try again.")}finally{btn.disabled=false;btn.textContent=old}}
+  async function saveCurrent(sizes) {
+    const btn=document.getElementById('addToQueue'),status=document.getElementById('singleSaveStatus');
+    if(btn.disabled) return;
+    const old=btn.textContent,owner=currentUser?.id||null,cloud=cloudReady,nav=workflowNavigationVersion,source=currentCreationSource;
+    const english=document.getElementById('englishInput').value.trim()||'Material';
+    const spanish=document.getElementById('spanishInput').value.trim()||'';
+    const photo=activePhotoDataUrl||photoDataUrl;
+    const checkOwner=()=>{if(owner!==(currentUser?.id||null)||cloud!==cloudReady)throw Error('Your session changed. Return to your label before saving again.');};
+    btn.disabled=true;btn.textContent='Saving…';
+    if(status)status.textContent=cloud?'Saving to My Labels and Ready to Print…':'Adding to this session. Cloud saving is not connected.';
+    try {
+      const storedPhoto=await prepareCloudPhoto(photo);checkOwner();
+      if(cloud) {
+        let label=library.find(x=>(x.english||'').toLowerCase()===english.toLowerCase()&&(x.spanish||'').toLowerCase()===spanish.toLowerCase());
+        if(!label) {
+          const rows=await restFetch('labels',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({english,spanish,photo_data:storedPhoto})});
+          checkOwner();const saved=rows?.[0];if(!saved)throw Error('Saved label was not returned.');
+          label={id:saved.id,english:saved.english,spanish:saved.spanish,photo:saved.photo_data||''};
+        }
+        await restFetch('print_queue',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(sizes.map(size=>({label_id:label.id,english,spanish,photo_data:storedPhoto,size})))});
+        checkOwner();await loadCloudData();checkOwner();
+      } else {
+        const base={english,spanish,photo:storedPhoto};
+        sizes.forEach(size=>queue.push({...base,size,id:crypto.randomUUID()}));
+        if(!library.some(x=>x.english===english&&x.spanish===spanish))library.push(base);
+        refreshQueue();refreshLibrary();
+      }
+      if(nav===workflowNavigationVersion) {
+        if(status)status.textContent=cloud?'Saved to your account.':'Added for this session only. Closing or reloading will lose these labels.';
+        if(source==='typed')window.LittleLabelsTypedLabel?.reset();
+        show('queue');showWorkflowSaveNotice('queue',sizes.length,cloud);
+      }
+    } catch(error) {
+      console.error(error);
+      if(status&&nav===workflowNavigationVersion)status.textContent='Saving could not finish. Your wording is still here. Check My Labels and Ready to Print before retrying. '+error.message;
+    } finally { btn.disabled=false;btn.textContent=old; }
+  }
   function selectedCreateSizes(){if(chosen.mode==='single'){const id=document.getElementById('singleSize')?.value;return id?[sizeString(id)]:[]}const set=eligibleSets().find(s=>s.id===chosen.id)||eligibleSets()[0];return sizesFromSet(set)}
 
   function populateBatch(){const sel=document.getElementById('batchSetSelect');if(!sel)return;const old=sel.value;sel.innerHTML='';eligibleSets().forEach(set=>{const o=document.createElement('option');o.value='set:'+set.id;o.textContent=`${set.name} · ${(set.items||[]).map(([id,q])=>`${q} ${meta()[id]?.name}`).join(' + ')}`;sel.append(o)});enabledIds().forEach(id=>{const o=document.createElement('option');o.value='single:'+id;o.textContent=`Single · ${meta()[id].name}`;sel.append(o)});if([...sel.options].some(o=>o.value===old))sel.value=old}

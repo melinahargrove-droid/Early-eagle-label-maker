@@ -1,4 +1,81 @@
-(()=>{const cfg=()=>window.LittleLabelSettings?.get?.()||{language:'es'},names=()=>window.LittleLabelSettings?.languages||{es:'Spanish',none:'English Only'};function current(){const id=cfg().language||'es';return{id,name:names()[id]||id}}function applyUI(){const l=current(),second=document.querySelector('label[for="spanishInput"]'),input=document.getElementById('spanishInput'),status=document.getElementById('translationStatus');if(second)second.textContent=l.id==='none'?'Second language':l.name;if(input){const hide=l.id==='none';input.style.display=hide?'none':'';second&&(second.style.display=hide?'none':'');if(hide)input.value=''}const es=document.getElementById('labelSpanish');if(es)es.style.display=l.id==='none'?'none':'';if(status&&l.id==='none')status.textContent='English-only labels are on.';document.querySelectorAll('.sheet-page-es,.print-label-es').forEach(x=>x.style.display=l.id==='none'?'none':'')}
-async function translate(){const l=current(),english=document.getElementById('englishInput')?.value.trim(),input=document.getElementById('spanishInput'),status=document.getElementById('translationStatus');if(!english||!input)return;if(l.id==='none'){input.value='';syncLabel?.();if(status)status.textContent='English-only labels are on.';return}if(status)status.textContent=`Translating ${l.name}…`;try{const r=await littleLabelsAIFetch(TRANSLATE_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({english,target_language:l.id,targetLanguage:l.name,language:l.id})});let d={};try{d=await r.json()}catch{}const value=d.translation||d.translated||d.text||(l.id==='es'?d.spanish:null);if(!r.ok||!value)throw new Error(d.error||d.details||`Request failed (${r.status})`);input.value=value;try{lastAutoTranslatedEnglish=english}catch{}syncLabel?.();if(status)status.textContent=`✓ ${l.name} updated automatically`}catch(e){console.error(e);if(status)status.textContent=`${l.name} could not update automatically. You can still edit it manually.`}}
-function patch(){try{autoTranslateEnglish=translate}catch{}try{scheduleAutoTranslation=function(){clearTimeout(translationTimer);const l=current(),s=document.getElementById('translationStatus');if(l.id==='none'){if(s)s.textContent='English-only labels are on.';return}if(s)s.textContent='Waiting for you to finish typing…';translationTimer=setTimeout(translate,900)}}catch{}const originalSync=window.syncLabel;try{syncLabel=function(){if(typeof originalSync==='function')originalSync();const l=current(),es=document.getElementById('labelSpanish');if(es){es.textContent=l.id==='none'?'':(document.getElementById('spanishInput')?.value||'');es.style.display=l.id==='none'?'none':''}}}catch{}applyUI()}
-function install(){patch();addEventListener('little-label-settings-changed',()=>{applyUI();translate()});const choose=document.getElementById('chooseSetBtn');choose?.addEventListener('click',applyUI);const edit=document.getElementById('editIdentification');edit?.addEventListener('click',applyUI)}document.readyState==='loading'?document.addEventListener('DOMContentLoaded',install,{once:true}):install()})();
+(() => {
+  const cfg = () => window.LittleLabelSettings?.get?.() || { language: 'es' };
+  const names = () => window.LittleLabelSettings?.languages || { es: 'Spanish', none: 'English Only' };
+  let request = 0;
+  function current() { const id = cfg().language || 'es'; return { id, name: names()[id] || id }; }
+  function invalidate() { request++; clearTimeout(translationTimer); }
+  function applyUI() {
+    const language = current(), label = document.querySelector('label[for="spanishInput"]');
+    const input = document.getElementById('spanishInput'), status = document.getElementById('translationStatus');
+    if (label) label.textContent = language.id === 'none' ? 'Second language' : language.name;
+    if (input) {
+      const hide = language.id === 'none'; input.style.display = hide ? 'none' : '';
+      if (label) label.style.display = hide ? 'none' : '';
+      if (hide) input.value = '';
+    }
+    const translated = document.getElementById('labelSpanish');
+    if (translated) translated.style.display = language.id === 'none' ? 'none' : '';
+    if (status && language.id === 'none') status.textContent = 'English-only labels are on.';
+    document.querySelectorAll('.sheet-page-es,.print-label-es').forEach(x => x.style.display = language.id === 'none' ? 'none' : '');
+  }
+  async function translate() {
+    const language = current(), english = document.getElementById('englishInput')?.value.trim();
+    const input = document.getElementById('spanishInput'), status = document.getElementById('translationStatus');
+    const version = ++request, owner = currentUser?.id || null, navigation = workflowNavigationVersion;
+    if (!english || !input) return;
+    if (language.id === 'none') {
+      input.value = ''; syncLabel?.(); if (status) status.textContent = 'English-only labels are on.'; return;
+    }
+    const stillCurrent = () => version === request && owner === (currentUser?.id || null)
+      && navigation === workflowNavigationVersion && language.id === current().id
+      && english === document.getElementById('englishInput')?.value.trim();
+    if (status) status.textContent = `Translating ${language.name}…`;
+    try {
+      const response = await littleLabelsAIFetch(TRANSLATE_URL, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ english, target_language: language.id, targetLanguage: language.name, language: language.id })
+      });
+      let data = {}; try { data = await response.json(); } catch {}
+      const value = data.translation || data.translated || data.text || (language.id === 'es' ? data.spanish : null);
+      if (!response.ok || !value) throw Error(data.error || data.details || `Request failed (${response.status})`);
+      if (!stillCurrent()) return;
+      input.value = value; lastAutoTranslatedEnglish = english; syncLabel?.();
+      if (status) status.textContent = `✓ ${language.name} updated automatically`;
+    } catch (error) {
+      console.error(error);
+      if (stillCurrent() && status) status.textContent = `${language.name} could not update automatically. You can still edit it manually.`;
+    }
+  }
+  function patch() {
+    autoTranslateEnglish = translate;
+    scheduleAutoTranslation = function () {
+      invalidate();
+      const language = current(), status = document.getElementById('translationStatus');
+      if (language.id === 'none') { if (status) status.textContent = 'English-only labels are on.'; return; }
+      if (status) status.textContent = 'Waiting for you to finish typing…';
+      const version = request, navigation = workflowNavigationVersion;
+      translationTimer = setTimeout(() => {
+        if (version === request && navigation === workflowNavigationVersion) translate();
+      }, 900);
+    };
+    const originalSync = window.syncLabel;
+    syncLabel = function () {
+      if (typeof originalSync === 'function') originalSync();
+      const language = current(), translated = document.getElementById('labelSpanish');
+      if (translated) {
+        translated.textContent = language.id === 'none' ? '' : (document.getElementById('spanishInput')?.value || '');
+        translated.style.display = language.id === 'none' ? 'none' : '';
+      }
+    };
+    applyUI();
+  }
+  function install() {
+    patch();
+    addEventListener('little-label-settings-changed', () => { invalidate(); applyUI(); translate(); });
+    document.addEventListener('little-label-account-changed', invalidate);
+    document.getElementById('spanishInput')?.addEventListener('input', invalidate);
+    document.getElementById('chooseSetBtn')?.addEventListener('click', applyUI);
+    document.getElementById('editIdentification')?.addEventListener('click', applyUI);
+  }
+  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', install, { once: true }) : install();
+})();
