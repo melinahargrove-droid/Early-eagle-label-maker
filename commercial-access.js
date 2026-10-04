@@ -4,13 +4,13 @@
   const permanent=()=>typeof userIsPermanent==='function'&&userIsPermanent(currentUser);
   const identity=()=>JSON.stringify([currentUser?.id||'',cloudSession?.access_token||'',permanent()]);
   const accountScreen=()=>['account','passwordRecovery'].some(id=>$(id)&&!$(id).classList.contains('hidden'));
-  let gateVisible=false,returnFocus=null;
+  let gateVisible=false,returnFocus=null,lastMode=null;
   const backgroundState=new Map();
   function visible(el){return !!el&&el.isConnected&&!el.closest('.hidden,.lla-hidden,.tl-hidden,.mli-hidden,.hide,[inert]')&&getComputedStyle(el).display!=='none'&&getComputedStyle(el).visibility!=='hidden'}
   function focusables(){return [...$('llAccessGate').querySelectorAll('button,input,select,textarea,a[href],[tabindex]')].filter(el=>!el.disabled&&el.tabIndex>=0&&visible(el))}
   function focusGate(){const first=focusables()[0]||$('llAccessGate');first?.focus({preventScroll:true})}
   function lockBackground(){
-    if(!document.body)return;
+    if(!globalThis.document?.body)return;
     for(const el of document.body.children){
       if(el.id==='llAccessGate'||['SCRIPT','STYLE'].includes(el.tagName))continue;
       if(!backgroundState.has(el))backgroundState.set(el,{inert:el.inert,aria:el.getAttribute('aria-hidden')});
@@ -44,6 +44,8 @@
     $('llaRetryAccess').classList.toggle('lla-hidden',mode!=='activate'||!!activatingIdentity);
     gate.setAttribute('aria-labelledby',mode==='checking'?'llaCheckingTitle':mode==='account'?'llaAccountTitle':'llaActivateTitle');
     setGateVisible(!accountScreen()&&!allowed);
+    if(gateVisible&&mode!==lastMode)focusGate();
+    lastMode=mode;
   }
   async function rpc(fn,args={}){
     const token=cloudSession?.access_token;
