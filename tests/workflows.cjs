@@ -83,7 +83,7 @@ const root = path.resolve(__dirname, '..');
   const switched=api.create([{english:'Synthetic Private',photo:'',spanish:''}],['Business Card']);currentUser={id:'other-synthetic-owner'};let blocked=false;try{await api.save(switched,true)}catch{blocked=true}
   return {failed,blocked,labelCount:labels.size,queueCount:printed.size,calls:calls.length};
  });
- assert.deepEqual(result,{failed:true,blocked:true,labelCount:1,queueCount:1,calls:4});
+ assert.deepEqual(result,{failed:true,blocked:true,labelCount:1,queueCount:1,calls:3});
  assert.deepEqual(errors,[]);console.log('PASS cloud retry deduplication and account-change write guard');
  }finally{await browser.close();server.close()}
 })().catch(e=>{console.error(e);process.exit(1)});

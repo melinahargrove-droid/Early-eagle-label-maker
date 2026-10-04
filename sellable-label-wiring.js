@@ -64,46 +64,10 @@
     wrap.append(singleChoice(chosen.mode==='single',()=>{chosen={mode:'single',id:null};renderCreateChoices();setSummary();focusChoice('llDynamicSets',null)}));
     if(singleWrap){singleWrap.classList.toggle('hidden',chosen.mode!=='single');const sel=document.getElementById('singleSize');
       if(sel){const old=sel.value;sel.innerHTML='';enabledIds().forEach(id=>{const option=document.createElement('option');option.value=id;option.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;sel.append(option)});if(enabledIds().includes(old))sel.value=old;sel.onchange=setSummary}}
-    const p=sec.querySelector('.card>p.muted');if(p)p.textContent='Choose a saved size-and-copy combination, or make just one label. Unavailable combinations stay here so you can see which sizes to turn on.';setSummary();
+    const p=sec.querySelector('.card>p.muted');if(p)p.textContent='Choose a saved size-and-copy combination, or make just one label. Unavailable combinations stay here so you can see which sizes to turn on.';setSummary();window.LittleLabelWorkflowSave.lockSingle();
   }
 
-  async function saveCurrent(sizes) {
-    const btn=document.getElementById('addToQueue'),status=document.getElementById('singleSaveStatus');
-    if(btn.disabled) return;
-    const old=btn.textContent,owner=currentUser?.id||null,cloud=cloudReady,nav=workflowNavigationVersion,source=currentCreationSource;
-    const english=document.getElementById('englishInput').value.trim()||'Material';
-    const spanish=document.getElementById('spanishInput').value.trim()||'';
-    const photo=activePhotoDataUrl||photoDataUrl;
-    const checkOwner=()=>{if(owner!==(currentUser?.id||null)||cloud!==cloudReady)throw Error('Your session changed. Return to your label before saving again.');};
-    btn.disabled=true;btn.textContent='Saving…';
-    if(status)status.textContent=cloud?'Saving to My Labels and Ready to Print…':'Adding to this session. Cloud saving is not connected.';
-    try {
-      const storedPhoto=await prepareCloudPhoto(photo);checkOwner();
-      if(cloud) {
-        let label=library.find(x=>(x.english||'').toLowerCase()===english.toLowerCase()&&(x.spanish||'').toLowerCase()===spanish.toLowerCase());
-        if(!label) {
-          const rows=await restFetch('labels',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({english,spanish,photo_data:storedPhoto})});
-          checkOwner();const saved=rows?.[0];if(!saved)throw Error('Saved label was not returned.');
-          label={id:saved.id,english:saved.english,spanish:saved.spanish,photo:saved.photo_data||''};
-        }
-        await restFetch('print_queue',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(sizes.map(size=>({label_id:label.id,english,spanish,photo_data:storedPhoto,size})))});
-        checkOwner();await loadCloudData();checkOwner();
-      } else {
-        const base={english,spanish,photo:storedPhoto};
-        sizes.forEach(size=>queue.push({...base,size,id:crypto.randomUUID()}));
-        if(!library.some(x=>x.english===english&&x.spanish===spanish))library.push(base);
-        refreshQueue();refreshLibrary();
-      }
-      if(nav===workflowNavigationVersion) {
-        if(status)status.textContent=cloud?'Saved to your account.':'Added for this session only. Closing or reloading will lose these labels.';
-        if(source==='typed')window.LittleLabelsTypedLabel?.reset();
-        show('queue');showWorkflowSaveNotice('queue',sizes.length,cloud);
-      }
-    } catch(error) {
-      console.error(error);
-      if(status&&nav===workflowNavigationVersion)status.textContent='Saving could not finish. Your wording is still here. Check My Labels and Ready to Print before retrying. '+error.message;
-    } finally { btn.disabled=false;btn.textContent=old; }
-  }
+  async function saveCurrent(sizes) { return window.LittleLabelWorkflowSave.single(sizes); }
   function selectedCreateSizes(){if(chosen.mode==='single'){const id=document.getElementById('singleSize')?.value;return id?[sizeString(id)]:[]}const set=selectableSets().find(s=>s.id===chosen.id)||selectableSets()[0];return sizesFromSet(set)}
 
   function populateBatch(){
@@ -114,6 +78,7 @@
     const previous=[...select.options].find(option=>option.value===old&&!option.disabled),fallback=[...select.options].find(option=>!option.disabled);select.value=(previous||fallback)?.value||'';
     let note=document.getElementById('llBatchAvailability');if(!note){note=document.createElement('p');note.id='llBatchAvailability';note.className='ll-combination-note';select.after(note)}
     note.textContent=unavailable.join(' ');note.hidden=!unavailable.length;
+    lockBatchSaveControls();
   }
 
   try{sizesForBatchSet=function(){const v=document.getElementById('batchSetSelect')?.value||'';if(v.startsWith('single:'))return [sizeString(v.slice(7))];if(v.startsWith('set:'))return sizesFromSet(selectableSets().find(s=>s.id===v.slice(4)));return sizesFromSet(selectableSets()[0])}}catch{}
@@ -128,9 +93,14 @@
     wrap.append(singleChoice(reprintChoice.mode==='single',()=>{reprintChoice={mode:'single',id:null};renderReprint();focusChoice('llReprintSets',null)}));
     if(single){single.classList.toggle('hidden',reprintChoice.mode!=='single');const select=document.getElementById('reprintSingleSize');
       if(select){const old=select.value;select.innerHTML='';enabledIds().forEach(id=>{const option=document.createElement('option');option.value=id;option.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;select.append(option)});if(enabledIds().includes(old))select.value=old}}
+    window.LittleLabelWorkflowSave.lockReprint();
   }
 
-  async function saveReprint(){if(!selectedLibraryLabel)return;const sizes=reprintChoice.mode==='single'?[sizeString(document.getElementById('reprintSingleSize')?.value)]:sizesFromSet(selectableSets().find(s=>s.id===reprintChoice.id)||selectableSets()[0]);if(!sizes.length||!enabledIds().length)return alert('Choose an available combination or turn on a size in Settings first.');const btn=document.getElementById('reprintQueueBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Adding…';try{if(cloudReady){await restFetch('print_queue',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(sizes.map(size=>({label_id:selectedLibraryLabel.id,english:selectedLibraryLabel.english,spanish:selectedLibraryLabel.spanish,photo_data:selectedLibraryLabel.photo||'',size})))});await loadCloudData()}else{sizes.forEach(size=>queue.push({id:crypto.randomUUID(),label_id:selectedLibraryLabel.id,english:selectedLibraryLabel.english,spanish:selectedLibraryLabel.spanish,photo:selectedLibraryLabel.photo||'',size}));refreshQueue()}show('queue')}catch(err){console.error(err);alert("I couldn't add that saved label to Ready to Print.")}finally{btn.disabled=false;btn.textContent=old}}
+  async function saveReprint(){
+    const sizes=reprintChoice.mode==='single'?[sizeString(document.getElementById('reprintSingleSize')?.value)]:sizesFromSet(selectableSets().find(s=>s.id===reprintChoice.id)||selectableSets()[0]);
+    if(!sizes.length||!enabledIds().length)return alert('Choose an available combination or turn on a size in Settings first.');
+    return window.LittleLabelWorkflowSave.reprint(sizes);
+  }
 
 
   function install(){const choiceStyles=document.createElement('style');choiceStyles.textContent='.ll-dynamic-choice{text-align:left;font:inherit;white-space:normal;overflow-wrap:anywhere}.ll-dynamic-choice:disabled{opacity:1;cursor:not-allowed;border-style:dashed!important;background:#F7F5F0!important;color:#61758A!important}.ll-combination-note{display:block;font-size:.82rem;line-height:1.45;color:#735B25;margin-top:8px}.ll-dynamic-choice:focus-visible{outline:3px solid #305F85;outline-offset:2px}';document.head.append(choiceStyles);const choose=document.getElementById('chooseSetBtn');choose?.addEventListener('click',()=>setTimeout(renderCreateChoices,0));document.getElementById('addToQueue')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const sizes=selectedCreateSizes();if(!sizes.length)return alert('Choose a label set first.');saveCurrent(sizes)},{capture:true});document.getElementById('reprintQueueBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();saveReprint()},{capture:true});const obs=new MutationObserver(()=>{if(!document.getElementById('batchReview')?.classList.contains('hidden'))populateBatch();if(!document.getElementById('reprint')?.classList.contains('hidden'))renderReprint()});['batchReview','reprint'].forEach(id=>{const el=document.getElementById(id);if(el)obs.observe(el,{attributes:true,attributeFilter:['class']})});addEventListener('little-label-settings-changed',()=>{renderCreateChoices();populateBatch();renderReprint()});renderCreateChoices();populateBatch()}

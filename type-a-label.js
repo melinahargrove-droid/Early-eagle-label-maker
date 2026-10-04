@@ -82,6 +82,7 @@
         $('tlSecond').focus(); return;
       }
       const blankPhoto = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="100%" height="100%" fill="white"/></svg>');
+      beginSingleDraft(JSON.stringify(['typed',english,translated]));
       currentCreationSource = 'typed';
       photoDataUrl = blankPhoto; activePhotoDataUrl = blankPhoto; cleanedPhotoDataUrl = ''; rawRemovedPhotoDataUrl = '';
       identification = { english, spanish: translated, category: 'typed label', confidence: 'high', notes: '' };

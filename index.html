@@ -605,7 +605,7 @@
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 113</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 114</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -618,12 +618,14 @@ const SUPABASE_URL = "https://ctmqvbsjliinlddfolti.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AYbs6V2u0qPo-jLTkTFlBQ_1ps7DaZC";
 const SESSION_STORAGE_KEY = "eea_label_maker_supabase_session_v1";
 let cloudReady = false;
-let pendingSyncRequests=0,pendingSyncWrites=0,syncErrorVersion=0,syncFailed=false,cloudLoaded=false,cloudLoadedOwner=null;
+let pendingSyncRequests=0,pendingSyncWrites=0,syncErrorVersion=0,syncFailed=false,cloudLoaded=false,cloudLoadedOwner=null,cloudLoadedSessionRevision=-1;
 const failedSyncWrites=new Set();
-let syncOwner=null,syncGeneration=0;
+let syncOwner=null,syncGeneration=0,syncSessionRevision=-1;
+let cloudLoadSequence=0,cloudWriteRevision=0;
 function ensureSyncOwner(){
+  observeCloudSession();
   const owner=currentUser?.id||null;
-  if(syncOwner!==owner){syncOwner=owner;syncGeneration++;pendingSyncRequests=0;pendingSyncWrites=0;failedSyncWrites.clear();syncFailed=false;cloudLoaded=cloudReady&&cloudLoadedOwner===owner;}
+  if(syncOwner!==owner || syncSessionRevision!==cloudSessionRevision){syncOwner=owner;syncSessionRevision=cloudSessionRevision;syncGeneration++;pendingSyncRequests=0;pendingSyncWrites=0;failedSyncWrites.clear();syncFailed=false;cloudLoaded=cloudReady&&cloudLoadedOwner===owner&&cloudLoadedSessionRevision===cloudSessionRevision;if(!cloudLoaded){queue=[];library=[];}}
 }
 function refreshSyncStatus(){
   ensureSyncOwner();
@@ -640,6 +642,28 @@ function updateSyncStatus(state){
 let currentUser = null;
 let cloudSession = null;
 let backgroundRemover = null;
+// Token rotation keeps this revision. Sign-in, sign-out and replacement sessions do not.
+let cloudSessionRevision=0,observedCloudSession=null,observedCloudOwner=null;
+let refreshingSession=null;
+function observeCloudSession(){
+  const owner=currentUser?.id||null;
+  if(observedCloudSession!==cloudSession || observedCloudOwner!==owner){
+    cloudSessionRevision++;observedCloudSession=cloudSession;observedCloudOwner=owner;
+  }
+}
+function captureCloudContext(){
+  observeCloudSession();
+  return {owner:currentUser?.id||null,revision:cloudSessionRevision,cloud:cloudReady};
+}
+function sessionChangedError(){
+  const error=new Error('Your session changed. Start a new label in the current account. Any completed saves remain in the original account.');
+  error.code='SESSION_CHANGED';return error;
+}
+function assertCloudContext(context,checkReady=true){
+  observeCloudSession();
+  if(context.revision!==cloudSessionRevision || context.owner!==(currentUser?.id||null) || (checkReady&&context.cloud!==cloudReady))throw sessionChangedError();
+}
+
 
 async function authFetch(path, options={}){
   const headers={
@@ -658,6 +682,7 @@ async function authFetch(path, options={}){
 }
 
 async function userAuthFetch(path,options={}){
+  const context=captureCloudContext();
   if(!cloudSession?.access_token) throw new Error("No signed-in Supabase session is available.");
   const headers={
     "apikey":SUPABASE_PUBLISHABLE_KEY,
@@ -668,6 +693,7 @@ async function userAuthFetch(path,options={}){
   const res=await fetch(SUPABASE_URL+path,{...options,headers});
   let data=null;
   try{data=await res.json();}catch{}
+  assertCloudContext(context,false);
   if(!res.ok){
     const msg=data?.msg || data?.message || data?.error_description || data?.error || `Supabase account error (${res.status})`;
     throw new Error(msg);
@@ -681,6 +707,12 @@ function userIsPermanent(user){
   return !!(user.email && Array.isArray(user.identities) && user.identities.length);
 }
 
+function clearSensitiveAuthFields(){
+  for(const id of ['signInPassword','newAccountPassword','newAccountPassword2','recoveryPassword','recoveryPassword2','accountCode']){
+    const input=document.getElementById(id);if(input)input.value='';
+  }
+}
+
 function setAuthStatus(id,text,cls){
   const el=$(id);
   el.textContent=text;
@@ -688,11 +720,11 @@ function setAuthStatus(id,text,cls){
   el.classList.remove("hidden");
 }
 
-let lastUIOwner=null;
+let lastUIOwner=null,lastUISessionRevision=-1;
 function updateAccountUI(){
   const owner=currentUser?.id||null;
   ensureSyncOwner();
-  if(owner!==lastUIOwner){lastUIOwner=owner;document.dispatchEvent(new CustomEvent('little-label-account-changed'));}
+  if(owner!==lastUIOwner || lastUISessionRevision!==cloudSessionRevision){lastUIOwner=owner;lastUISessionRevision=cloudSessionRevision;document.dispatchEvent(new CustomEvent('little-label-account-changed'));}
   refreshSyncStatus();
 
   document.dispatchEvent(new CustomEvent('little-label-auth-updated'));
@@ -749,6 +781,7 @@ async function verifyAccountEmail(){
     setAuthStatus("accountCreateStatus","Enter the verification code from your email.","error");
     return;
   }
+  const context=captureCloudContext();
   const btn=$("verifyAccountCodeBtn");
   btn.disabled=true; btn.textContent="Verifying…";
   try{
@@ -757,9 +790,10 @@ async function verifyAccountEmail(){
       body:JSON.stringify({email,token,type:"email_change"})
     });
 
+    assertCloudContext(context,false);
     // verify may return a refreshed session
     if(data?.access_token){
-      saveCloudSession(data);
+      saveCloudSession(data,data.user?.id===context.owner);
       currentUser=data.user || currentUser;
     }else{
       // Refresh the existing session so the verified identity appears.
@@ -769,6 +803,7 @@ async function verifyAccountEmail(){
       }
     }
 
+    $("accountCode").value="";
     $("accountPasswordPane").classList.remove("hidden");
     setAuthStatus("accountCreateStatus","✓ Email verified. Now choose a password.","ok");
   }catch(err){
@@ -802,6 +837,7 @@ async function finishPermanentAccount(){
       const refreshed=await refreshCloudSession(cloudSession.refresh_token);
       currentUser=refreshed?.user || currentUser;
     }
+    clearSensitiveAuthFields();
     sessionStorage.removeItem("eea_pending_account_email");
     updateAccountUI();
     await loadCloudData();
@@ -822,6 +858,7 @@ async function signInPermanent(){
     setAuthStatus("signInStatus","Enter your email and password.","error");
     return;
   }
+  const context=captureCloudContext();
   const btn=$("signInBtn");
   btn.disabled=true; btn.textContent="Signing in…";
   try{
@@ -829,6 +866,7 @@ async function signInPermanent(){
       method:"POST",
       body:JSON.stringify({email,password})
     });
+    assertCloudContext(context,false);
     if(!data?.access_token || !data?.user) throw new Error("No signed-in session was returned.");
     saveCloudSession(data);
     currentUser=data.user;
@@ -847,25 +885,19 @@ async function signInPermanent(){
 
 async function signOutPermanent(){
   if(!confirm("Sign out on this device? Your labels stay safely saved in your account.")) return;
+  const token=cloudSession?.access_token;
+  // Invalidate immediately, before the logout round-trip can complete.
+  cloudSession=null;currentUser=null;cloudReady=false;
+  try{localStorage.removeItem(SESSION_STORAGE_KEY);}catch{}
+  queue=[];library=[];cloudLoaded=false;cloudLoadedOwner=null;
+  updateAccountUI();refreshQueue();refreshLibrary();
+  const context=captureCloudContext();
   try{
-    if(cloudSession?.access_token){
-      await userAuthFetch("/auth/v1/logout",{method:"POST",body:"{}"}).catch(()=>{});
-    }
-  }finally{
-    try{localStorage.removeItem(SESSION_STORAGE_KEY);}catch{}
-    cloudSession=null; currentUser=null; cloudReady=false;
-    queue=[]; library=[];
-    refreshQueue(); refreshLibrary();
-    // Create a fresh anonymous session so the app can still work locally/cloud-backed.
-    try{
-      cloudSession=await createAnonymousSession();
-      currentUser=cloudSession.user;
-      cloudReady=true;
-      await loadCloudData();
-    }catch{}
-    updateAccountUI();
-    show("home");
-  }
+    if(token)await authFetch("/auth/v1/logout",{method:"POST",body:"{}",headers:{Authorization:`Bearer ${token}`}}).catch(()=>{});
+    assertCloudContext(context,false);
+    await createAnonymousSession();cloudReady=true;updateAccountUI();await loadCloudData();
+  }catch(err){if(err.code==='SESSION_CHANGED')return;}
+  show("home");
 }
 
 
@@ -898,6 +930,7 @@ async function startRecoveryFromUrl(){
 
   try{
     saveCloudSession(session);
+    clearSensitiveAuthFields();
     cloudSession = session;
     const user = await userAuthFetch("/auth/v1/user",{method:"GET"});
     currentUser = user?.user || user || null;
@@ -955,6 +988,7 @@ async function saveRecoveryPassword(){
     updateAccountUI();
     await loadCloudData();
 
+    clearSensitiveAuthFields();
     setAuthStatus("recoveryStatus","✓ Password updated. You can now sign in on your laptop with this email and new password.","ok");
     setTimeout(()=>show("home"),1200);
   }catch(err){
@@ -966,78 +1000,123 @@ async function saveRecoveryPassword(){
   }
 }
 
-function saveCloudSession(session){
+function saveCloudSession(session,preserve=false){
+  observeCloudSession();
+  if(!preserve)cloudSessionRevision++;
   cloudSession=session;
+  currentUser=session?.user||currentUser;
+  observedCloudSession=cloudSession;observedCloudOwner=currentUser?.id||null;
   try{localStorage.setItem(SESSION_STORAGE_KEY,JSON.stringify(session));}catch{}
 }
 function loadStoredCloudSession(){
   try{return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY)||"null");}catch{return null;}
 }
 async function createAnonymousSession(){
+  const context=captureCloudContext();
   const data=await authFetch("/auth/v1/signup",{method:"POST",body:"{}"});
+  assertCloudContext(context,false);
   if(!data?.access_token || !data?.user) throw new Error("Anonymous sign-in did not return a session.");
   saveCloudSession(data);
   return data;
 }
-async function refreshCloudSession(refreshToken){
-  const data=await authFetch("/auth/v1/token?grant_type=refresh_token",{
-    method:"POST",body:JSON.stringify({refresh_token:refreshToken})
-  });
-  if(!data?.access_token) throw new Error("Could not refresh cloud session.");
-  saveCloudSession(data);
-  return data;
+async function refreshCloudSession(refreshToken,context=captureCloudContext()){
+  assertCloudContext(context,false);
+  if(!refreshToken || cloudSession?.refresh_token!==refreshToken)throw sessionChangedError();
+  if(refreshingSession?.revision===context.revision && refreshingSession.token===refreshToken)return refreshingSession.promise;
+  const expectedOwner=context.owner||cloudSession?.user?.id||null;
+  const refresh={revision:context.revision,token:refreshToken};
+  refresh.promise=(async()=>{
+    const data=await authFetch("/auth/v1/token?grant_type=refresh_token",{
+      method:"POST",body:JSON.stringify({refresh_token:refreshToken})
+    }).catch(error=>{assertCloudContext(context,false);throw error;});
+    assertCloudContext(context,false);
+    if(!data?.access_token || !data?.user || (expectedOwner&&data.user.id!==expectedOwner))throw sessionChangedError();
+    saveCloudSession(data,true);
+    return data;
+  })();
+  refreshingSession=refresh;
+  try{return await refresh.promise;}finally{if(refreshingSession===refresh)refreshingSession=null;}
 }
 async function ensureCloudSession(){
-  let stored=loadStoredCloudSession();
+  const stored=loadStoredCloudSession();
   if(stored?.refresh_token){
+    // A stored token is only a refresh candidate. Do not expose its user as
+    // signed in (or check purchase access) before refresh has verified it.
+    cloudSession=stored;observeCloudSession();
     try{return await refreshCloudSession(stored.refresh_token);}catch(err){
+      if(err.code==='SESSION_CHANGED')throw err;
       console.warn("Stored Supabase session could not refresh; creating a new anonymous session.",err);
     }
   }
   return await createAnonymousSession();
 }
-async function restFetch(path,options={},retry=true){
-  const writing=!!options.method && options.method!=="GET";
+async function restFetch(path,options={},retry=true,context=captureCloudContext()){
+  assertCloudContext(context);
   ensureSyncOwner();
-  const requestOwner=currentUser?.id,requestGeneration=syncGeneration;
+  const writing=!!options.method && options.method.toUpperCase()!=="GET";
+  const requestGeneration=syncGeneration;
   const writeKey=writing?path+'|'+(options.body||''):null;
-  pendingSyncRequests++;if(writing)pendingSyncWrites++;refreshSyncStatus();
+  pendingSyncRequests++;if(writing){pendingSyncWrites++;cloudWriteRevision++;}refreshSyncStatus();
   try{
-  if(!cloudSession?.access_token) throw new Error("No Supabase session is available.");
-  const headers={
-    "apikey":SUPABASE_PUBLISHABLE_KEY,
-    "Authorization":`Bearer ${cloudSession.access_token}`,
-    "Content-Type":"application/json",
-    ...(options.headers||{})
-  };
-  const res=await fetch(SUPABASE_URL+"/rest/v1/"+path,{...options,headers});
-  if(res.status===401 && retry && cloudSession?.refresh_token){
-    await refreshCloudSession(cloudSession.refresh_token);
-    return restFetch(path,options,false);
+    for(let attempt=0;attempt<2;attempt++){
+      assertCloudContext(context);
+      const token=cloudSession?.access_token,refreshToken=cloudSession?.refresh_token;
+      if(!token)throw new Error("No Supabase session is available.");
+      const headers={...(options.headers||{}),"apikey":SUPABASE_PUBLISHABLE_KEY,
+        "Authorization":`Bearer ${token}`,"Content-Type":"application/json"};
+      const res=await fetch(SUPABASE_URL+"/rest/v1/"+path,{...options,headers});
+      assertCloudContext(context);
+      if(res.status===401 && retry && attempt===0 && refreshToken){
+        // Another request may already have rotated this same session's token.
+        if(cloudSession.access_token===token)await refreshCloudSession(refreshToken,context);
+        assertCloudContext(context);
+        continue;
+      }
+      let data=null;
+      if(res.status!==204){try{data=await res.json();}catch{}}
+      assertCloudContext(context);
+      if(!res.ok)throw new Error(data?.message || data?.hint || data?.details || data?.error || `Supabase data error (${res.status})`);
+      if(writing)failedSyncWrites.delete(writeKey);
+      return data;
+    }
+  }catch(err){
+    ensureSyncOwner();
+    if(requestGeneration===syncGeneration){if(writing)failedSyncWrites.add(writeKey);syncFailed=true;syncErrorVersion++;}
+    throw err;
+  }finally{
+    ensureSyncOwner();
+    if(requestGeneration===syncGeneration){pendingSyncRequests--;if(writing){pendingSyncWrites--;cloudWriteRevision++;}}
+    refreshSyncStatus();
   }
-  let data=null;
-  if(res.status!==204){try{data=await res.json();}catch{}}
-  if(!res.ok){
-    const msg=data?.message || data?.hint || data?.details || data?.error || `Supabase data error (${res.status})`;
-    throw new Error(msg);
-  }
-  if(writing&&requestGeneration===syncGeneration)failedSyncWrites.delete(writeKey);
-  return data;
-  }catch(err){if(currentUser?.id===requestOwner&&requestGeneration===syncGeneration){if(writing)failedSyncWrites.add(writeKey);syncFailed=true;syncErrorVersion++;}throw err;}
-  finally{if(requestGeneration===syncGeneration){pendingSyncRequests--;if(writing)pendingSyncWrites--;}refreshSyncStatus();}
 }
+window.addEventListener('storage',event=>{
+  if(event.key!==SESSION_STORAGE_KEY)return;
+  let session=null;try{session=JSON.parse(event.newValue||'null');}catch{return;}
+  if(session?.access_token===cloudSession?.access_token && session?.refresh_token===cloudSession?.refresh_token)return;
+  // A different token from another tab may be a different sign-in, even for the same user.
+  cloudSession=session;currentUser=session?.user||null;cloudReady=!!session?.access_token;
+  queue=[];library=[];cloudLoaded=false;cloudLoadedOwner=null;
+  updateAccountUI();refreshQueue();refreshLibrary();
+  if(cloudReady)loadCloudData().catch(()=>{});
+});
 async function initCloud(){
   const status = $("cloudStatus");
+  let context=null;
   try{
-    cloudSession=await ensureCloudSession();
+    const session=await ensureCloudSession();
+    if(cloudSession!==session)return;
     currentUser=cloudSession?.user || null;
     if(!currentUser) throw new Error("Could not create a private app session.");
     cloudReady=true;
+    context=captureCloudContext();
     status.className="status ok";
     status.textContent="✓ Cloud saving is connected. Your queue and label library will persist.";
     await loadCloudData();
+    assertCloudContext(context);
     updateAccountUI();
   }catch(err){
+    if(err.code==='SESSION_CHANGED')return;
+    if(context){try{assertCloudContext(context);}catch{return;}}
     console.error("Supabase startup error:",err);
     cloudReady=false;
     updateSyncStatus("Session only");
@@ -1049,12 +1128,14 @@ async function initCloud(){
 async function loadCloudData(){
   if(!cloudReady) return;
   ensureSyncOwner();
-  const loadingUserId=currentUser?.id,errorAtStart=syncErrorVersion,loadGeneration=syncGeneration;
+  const context=captureCloudContext(),errorAtStart=syncErrorVersion,loadGeneration=syncGeneration;
+  const loadSequence=++cloudLoadSequence,writeRevision=cloudWriteRevision;
   const [qData,lData]=await Promise.all([
     restFetch("print_queue?select=*&printed_at=is.null&order=created_at.asc"),
     restFetch("labels?select=*&order=created_at.desc")
   ]);
-  if(!cloudReady || currentUser?.id!==loadingUserId || loadGeneration!==syncGeneration) return;
+  assertCloudContext(context);
+  if(loadGeneration!==syncGeneration || loadSequence!==cloudLoadSequence || writeRevision!==cloudWriteRevision || pendingSyncWrites) return false;
   queue=(qData||[]).map(x=>({
     id:x.id,label_id:x.label_id,english:x.english,spanish:x.spanish,
     photo:x.photo_data||"",size:x.size,created_at:x.created_at
@@ -1064,9 +1145,10 @@ async function loadCloudData(){
   }));
   refreshQueue();
   refreshLibrary();
-  cloudLoaded=true;cloudLoadedOwner=currentUser?.id||null;
+  cloudLoaded=true;cloudLoadedOwner=currentUser?.id||null;cloudLoadedSessionRevision=cloudSessionRevision;
   if(syncErrorVersion===errorAtStart)syncFailed=false;
   refreshSyncStatus();
+  return true;
 }
 async function prepareCloudPhoto(dataUrl){
   if(!dataUrl) return "";
@@ -1123,7 +1205,37 @@ const batchTranslationRequestIds = new Map();
 let printBatchIds = [];
 let printLayoutPages = [];
 let currentCreationSource = 'photo';
+let singleDraftContext=null,batchDraftContext=null,reprintDraftContext=null;
+let singleSaveJob=null,batchSaveJob=null,reprintSaveJob=null;
+const reprintSaveJobs=new Map();
+function beginSingleDraft(key=null){
+  if(key!==null && singleDraftContext?.draftKey===key && singleSaveJob && !singleSaveJob.complete){assertCloudContext(singleSaveJob.context);return;}
+  singleDraftContext={...captureCloudContext(),draftKey:key};singleSaveJob=null;
+  if($('addToQueue')){$('addToQueue').disabled=false;$('addToQueue').textContent='Save & Add to Print';}
+  window.LittleLabelWorkflowSave?.lockSingle();
+}
+function assertSingleDraft(context){assertCloudContext(context);if(singleDraftContext!==context || (singleSaveJob&&!singleSaveJob.complete))throw sessionChangedError();}
+function beginBatchDraft(){batchDraftContext=captureCloudContext();batchSaveJob=null;lockBatchSaveControls();$('saveAllBatchBtn').disabled=false;$('saveAllBatchBtn').textContent='Save & Add to Print';}
+function assertBatchDraft(context,item,index){assertCloudContext(context);if(batchDraftContext!==context || (item&&batchDrafts[index]!==item) || (batchSaveJob&&!batchSaveJob.complete))throw sessionChangedError();}
+
 let workflowNavigationVersion = 0;
+
+document.addEventListener('little-label-account-changed',()=>{
+  clearSensitiveAuthFields();
+  singleDraftContext=null;batchDraftContext=null;reprintDraftContext=null;
+  singleSaveJob=null;batchSaveJob=null;reprintSaveJob=null;reprintSaveJobs.clear();
+  selectedLibraryLabel=null;batchDrafts=[];
+  photoDataUrl='';activePhotoDataUrl='';cleanedPhotoDataUrl='';rawRemovedPhotoDataUrl='';identification=null;
+  clearTimeout(translationTimer);translationRequestId++;
+  for(const id of ['englishInput','spanishInput','batchListInput','productLinkInput'])if($(id))$(id).value='';
+  for(const id of ['capturedPreview','confirmPhoto','labelPhoto','reprintPhoto'])$(id)?.removeAttribute('src');
+  for(const id of ['foundEnglish','foundSpanish','foundCategory','foundConfidence','foundNotes','labelEnglish','labelSpanish','reprintEnglish','reprintSpanish','batchReviewItems','sheetPreviewPages','printRoot','printSheetSummary'])if($(id))$(id).textContent='';
+  printBatchIds=[];printLayoutPages=[];
+  $('printPreview')?.classList.add('hidden');
+  for(const [id,text] of [['addToQueue','Save & Add to Print'],['saveAllBatchBtn','Save & Add to Print'],['reprintQueueBtn','Add to Print']])if($(id)){$(id).disabled=false;$(id).textContent=text;}
+  batchTranslationTimers.forEach(clearTimeout);batchTranslationTimers.clear();batchTranslationRequestIds.clear();
+  refreshQueue();refreshLibrary();lockBatchSaveControls();window.LittleLabelWorkflowSave?.lockSingle();window.LittleLabelWorkflowSave?.lockReprint();
+});
 
 function showWorkflowSaveNotice(destination, copies, cloud) {
   const notice = $(destination === 'library' ? 'librarySaveNotice' : 'queueSaveNotice');
@@ -1180,15 +1292,20 @@ function setStatus(text, cls){
 }
 async function handlePhoto(file){
   if(!file) return;
+  beginSingleDraft();
+  const context=singleDraftContext;
   currentCreationSource='photo';
   try{
     $("retryIdentify").classList.add("hidden");
     setStatus("Preparing photo…","loading");
-    photoDataUrl = await compressImage(file);
+    const prepared=await compressImage(file);
+    assertSingleDraft(context);
+    photoDataUrl=prepared;
     $("capturedPreview").src=photoDataUrl;
     $("capturedPreview").classList.remove("hidden");
     await identify();
   }catch(err){
+    if(err.code==='SESSION_CHANGED')return;
     console.error(err);
     setStatus("I couldn't prepare that photo. Please try another picture.","error");
   }
@@ -1297,8 +1414,13 @@ async function applyCleanupMode(mode){
   cleanupMode=mode;
   setCleanupStatus(`Refining ${mode} cleanup…`,"loading");
 
+  const context=singleDraftContext;
   try{
-    cleanedPhotoDataUrl=await refineRemovedBackground(rawRemovedPhotoDataUrl,mode);
+    if(!context)return;
+    assertSingleDraft(context);
+    const cleaned=await refineRemovedBackground(rawRemovedPhotoDataUrl,mode);
+    assertSingleDraft(context);
+    cleanedPhotoDataUrl=cleaned;
     activePhotoDataUrl=cleanedPhotoDataUrl;
     $("confirmPhoto").src=cleanedPhotoDataUrl;
 
@@ -1310,6 +1432,7 @@ async function applyCleanupMode(mode){
     syncLabel();
     setCleanupStatus("Background cleanup preview — choose Normal or Strong, then approve the version you like.","ok");
   }catch(err){
+    if(err.code==='SESSION_CHANGED')return;
     console.error("Cleanup refinement error:",err);
     setCleanupStatus("I couldn't refine that cleanup. You can still use the original photo.","error");
   }
@@ -1327,8 +1450,12 @@ async function cleanBackground(){
   $("photoChoiceRow").classList.add("hidden");
   $("retryCleanupBtn").classList.add("hidden");
   setCleanupStatus("✨ Removing the background… The first time on this phone may take a little longer.","loading");
+  const context=singleDraftContext;
   try{
+    if(!context)return;
+    assertSingleDraft(context);
     const removeBackground = await getBackgroundRemover();
+    assertSingleDraft(context);
     if(!removeBackground){
       throw new Error("Background-removal library could not load on this device.");
     }
@@ -1337,7 +1464,7 @@ async function cleanBackground(){
       device:"cpu",
       output:{format:"image/png",quality:1},
       progress:(key,current,total)=>{
-        if(total>0){
+        if(singleDraftContext===context && context.revision===cloudSessionRevision && total>0){
           const pct=Math.max(1,Math.min(100,Math.round((current/total)*100)));
           if(String(key).startsWith("fetch:")){
             setCleanupStatus(`✨ Loading background cleaner… ${pct}%`,"loading");
@@ -1347,13 +1474,17 @@ async function cleanBackground(){
         }
       }
     });
-    rawRemovedPhotoDataUrl = await blobToDataUrl(blob);
+    assertSingleDraft(context);
+    const removed=await blobToDataUrl(blob);
+    assertSingleDraft(context);
+    rawRemovedPhotoDataUrl=removed;
     cleanupSucceeded=true;
     $("cleanupStrengthWrap").classList.remove("hidden");
     $("photoChoiceRow").classList.remove("hidden");
     await applyCleanupMode("normal");
     return true;
   }catch(err){
+    if(err.code==='SESSION_CHANGED')return;
     console.error("Background cleanup error:",err);
     rawRemovedPhotoDataUrl="";
     cleanedPhotoDataUrl="";
@@ -1373,7 +1504,10 @@ async function identify(){
   if(!photoDataUrl) return;
   setStatus("✨ Identifying the classroom material…","loading");
   $("retryIdentify").classList.add("hidden");
+  const context=singleDraftContext;
   try{
+    if(!context)return;
+    assertSingleDraft(context);
     const response = await littleLabelsAIFetch(FUNCTION_URL,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
@@ -1384,6 +1518,7 @@ async function identify(){
     if(!response.ok || !data.success || !data.identification){
       throw new Error(data.details || data.error || `Request failed (${response.status})`);
     }
+    assertSingleDraft(context);
     identification=data.identification;
     setStatus("✓ Identified!","ok");
     activePhotoDataUrl=photoDataUrl;
@@ -1391,6 +1526,7 @@ async function identify(){
     show("confirm");
     await cleanBackground();
   }catch(err){
+    if(err.code==='SESSION_CHANGED')return;
     console.error("Identification error:",err);
     setStatus("Identification didn't work: " + err.message,"error");
     $("retryIdentify").classList.remove("hidden");
@@ -1475,55 +1611,12 @@ function updateSetSummary(){
   $("setSummary").innerHTML=txt;
 }
 async function addQueue(){
-  const btn=$("addToQueue");
-  const originalText=btn.textContent;
-  btn.disabled=true;
-  btn.textContent="Saving…";
-  try{
-    const english=$("englishInput").value.trim() || "Material";
-    const spanish=$("spanishInput").value.trim() || "material";
-    const storedPhoto=await prepareCloudPhoto(activePhotoDataUrl || photoDataUrl);
-    const sizes = selectedSet==="matching"
-      ? ["Business Card · 3.375 × 2 in","Business Card · 3.375 × 2 in"]
-      : selectedSet==="different"
-        ? ["Business Card · 3.375 × 2 in","CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)"]
-        : [$("singleSize").value];
-
-    if(cloudReady){
-      let label=library.find(x=>x.english.toLowerCase()===english.toLowerCase() && x.spanish.toLowerCase()===spanish.toLowerCase());
-      if(!label){
-        const savedRows=await restFetch("labels",{
-          method:"POST",
-          headers:{"Prefer":"return=representation"},
-          body:JSON.stringify({english,spanish,photo_data:storedPhoto})
-        });
-        const saved=savedRows?.[0];
-        if(!saved) throw new Error("Supabase did not return the saved label.");
-        label={id:saved.id,english:saved.english,spanish:saved.spanish,photo:saved.photo_data||""};
-      }
-      const rows=sizes.map(size=>({
-        label_id:label.id,english,spanish,photo_data:storedPhoto,size
-      }));
-      await restFetch("print_queue",{
-        method:"POST",
-        headers:{"Prefer":"return=representation"},
-        body:JSON.stringify(rows)
-      });
-      await loadCloudData();
-    }else{
-      const itemBase={english,spanish,photo:storedPhoto};
-      sizes.forEach(size=>queue.push({...itemBase,size,id:crypto.randomUUID()}));
-      if(!library.some(x=>x.english===english && x.spanish===spanish)) library.push(itemBase);
-      refreshQueue(); refreshLibrary();
-    }
-    show("queue");
-  }catch(err){
-    console.error("Save queue error:",err);
-    alert("I couldn't save this label to the persistent queue. Please try again.");
-  }finally{
-    btn.disabled=false;
-    btn.textContent=originalText;
-  }
+  const sizes=selectedSet==="matching"
+    ? ["Business Card · 3.375 × 2 in","Business Card · 3.375 × 2 in"]
+    : selectedSet==="different"
+      ? ["Business Card · 3.375 × 2 in","CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)"]
+      : [$("singleSize").value];
+  return window.LittleLabelWorkflowSave.single(sizes);
 }
 async function markPrinted(id){
   try{
@@ -2197,7 +2290,13 @@ function refreshLibrary(){
 }
 
 function openReprint(item){
+  if(!library.includes(item))return;
+  reprintDraftContext=captureCloudContext();
+  reprintSaveJob=reprintSaveJobs.get(item.id)||null;
+  if(reprintSaveJob?.complete){reprintSaveJobs.delete(item.id);reprintSaveJob=null;}
   selectedLibraryLabel=item;
+  $('reprintQueueBtn').disabled=!!reprintSaveJob?.busy;
+  $('reprintQueueBtn').textContent=reprintSaveJob?'Retry Add to Print':'Add to Print';
   selectedReprintSet="matching";
   $("reprintPhoto").src=item.photo || "";
   $("reprintEnglish").textContent=item.english || "";
@@ -2210,54 +2309,13 @@ function openReprint(item){
 }
 
 async function addSavedLabelToQueue(){
-  if(!selectedLibraryLabel) return;
-  const btn=$("reprintQueueBtn");
-  const oldText=btn.textContent;
-  btn.disabled=true;
-  btn.textContent="Adding…";
-
-  try{
-    const sizes=selectedReprintSet==="matching"
-      ? ["Business Card · 3.375 × 2 in","Business Card · 3.375 × 2 in"]
-      : selectedReprintSet==="different"
-        ? ["Business Card · 3.375 × 2 in","CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)"]
-        : [$("reprintSingleSize").value];
-
-    if(cloudReady){
-      const rows=sizes.map(size=>({
-        label_id:selectedLibraryLabel.id,
-        english:selectedLibraryLabel.english,
-        spanish:selectedLibraryLabel.spanish,
-        photo_data:selectedLibraryLabel.photo || "",
-        size
-      }));
-      await restFetch("print_queue",{
-        method:"POST",
-        headers:{"Prefer":"return=representation"},
-        body:JSON.stringify(rows)
-      });
-      await loadCloudData();
-    }else{
-      sizes.forEach(size=>queue.push({
-        id:crypto.randomUUID(),
-        label_id:selectedLibraryLabel.id,
-        english:selectedLibraryLabel.english,
-        spanish:selectedLibraryLabel.spanish,
-        photo:selectedLibraryLabel.photo || "",
-        size
-      }));
-      refreshQueue();
-    }
-    show("queue");
-  }catch(err){
-    console.error("Reprint queue error:",err);
-    alert("I couldn't add that saved label to the print queue. Please try again.");
-  }finally{
-    btn.disabled=false;
-    btn.textContent=oldText;
-  }
+  const sizes=selectedReprintSet==="matching"
+    ? ["Business Card · 3.375 × 2 in","Business Card · 3.375 × 2 in"]
+    : selectedReprintSet==="different"
+      ? ["Business Card · 3.375 × 2 in","CP Basket · 4.5 × 3 in (folds to 4.5 × 1.5 visible)"]
+      : [$("reprintSingleSize").value];
+  return window.LittleLabelWorkflowSave.reprint(sizes);
 }
-
 
 function setBatchMode(mode){
   batchMode=mode;
@@ -2330,8 +2388,11 @@ async function createListDrafts(){
   btn.textContent="Creating…";
   setBatchProgress(`Creating ${items.length} label draft${items.length===1?"":"s"}…`);
 
+  beginBatchDraft();
+  const context=batchDraftContext;
   try{
     const data=await callBatchFunction({mode:"list",items});
+    assertBatchDraft(context);
     batchDrafts=(data.items||[]).map((x,i)=>({
       id:crypto.randomUUID(),
       original:items[i] || x.english || "",
@@ -2344,9 +2405,11 @@ async function createListDrafts(){
     renderBatchReview();
     show("batchReview");
   }catch(err){
+    if(err.code==='SESSION_CHANGED')return;
     console.error(err);
     setBatchProgress("I couldn't create the batch: "+err.message,"error");
   }finally{
+    if(batchDraftContext!==context)return;
     btn.disabled=false;
     btn.textContent="Create Label Drafts";
   }
@@ -2363,10 +2426,13 @@ async function createProductLinkDraft(){
   btn.textContent="Reading product page…";
   setBatchProgress("Reading the product page and preparing the label…");
 
+  beginBatchDraft();
+  const context=batchDraftContext;
   try{
     const data=await callBatchFunction({mode:"url",url});
     const x=(data.items||[])[0];
     if(!x) throw new Error("No product label was returned.");
+    assertBatchDraft(context);
     batchDrafts=[{
       id:crypto.randomUUID(),
       original:url,
@@ -2381,9 +2447,11 @@ async function createProductLinkDraft(){
     renderBatchReview();
     show("batchReview");
   }catch(err){
+    if(err.code==='SESSION_CHANGED')return;
     console.error(err);
     setBatchProgress("I couldn't create that product label: "+err.message,"error");
   }finally{
+    if(batchDraftContext!==context)return;
     btn.disabled=false;
     btn.textContent="Create Product Label";
   }
@@ -2391,6 +2459,7 @@ async function createProductLinkDraft(){
 
 
 async function translateBatchItem(index, englishInput, spanishInput, status){
+  const context=batchDraftContext,item=batchDrafts[index];
   const english=(englishInput.value||"").trim();
   if(!english) return;
 
@@ -2399,6 +2468,8 @@ async function translateBatchItem(index, englishInput, spanishInput, status){
   status.textContent="Translating Spanish…";
 
   try{
+    if(!context)return;
+    assertBatchDraft(context,item,index);
     const response=await littleLabelsAIFetch(TRANSLATE_URL,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
@@ -2414,6 +2485,7 @@ async function translateBatchItem(index, englishInput, spanishInput, status){
       throw new Error(data.error || data.details || `Request failed (${response.status})`);
     }
 
+    assertBatchDraft(context,item,index);
     spanishInput.value=data.spanish;
     if(batchDrafts[index]){
       batchDrafts[index].english=english;
@@ -2552,11 +2624,12 @@ function renderBatchReview(){
     card.append(grid,actions);
     wrap.append(card);
   });
+  lockBatchSaveControls();
 }
 
 
 async function retryProductPhoto(index,button,img,status){
-  const item=batchDrafts[index];
+  const context=batchDraftContext,item=batchDrafts[index];
   if(!item?.product_url) return;
 
   button.disabled=true;
@@ -2564,7 +2637,10 @@ async function retryProductPhoto(index,button,img,status){
   status.textContent="Looking for the exact product photo again…";
 
   try{
+    if(!context)return;
+    assertBatchDraft(context,item,index);
     const data=await callBatchFunction({mode:"url",url:item.product_url});
+    assertBatchDraft(context,item,index);
     const x=(data.items||[])[0];
     if(!x) throw new Error("No product result was returned.");
 
@@ -2586,6 +2662,7 @@ async function retryProductPhoto(index,button,img,status){
 }
 
 function chooseProductPhotoUpload(index,img,status){
+  const context=batchDraftContext,item=batchDrafts[index];
   const input=document.createElement("input");
   input.type="file";
   input.accept="image/*";
@@ -2595,6 +2672,8 @@ function chooseProductPhotoUpload(index,img,status){
     const file=input.files?.[0];
     if(!file) return;
     try{
+      if(!context)return;
+      assertBatchDraft(context,item,index);
       const raw=await dataUrlFromFile(file);
       const image=new Image();
       await new Promise((resolve,reject)=>{
@@ -2614,6 +2693,7 @@ function chooseProductPhotoUpload(index,img,status){
       ctx.fillRect(0,0,w,h);
       ctx.drawImage(image,0,0,w,h);
 
+      assertBatchDraft(context,item,index);
       const dataUrl=canvas.toDataURL("image/jpeg",0.9);
       batchDrafts[index].photo=dataUrl;
       batchDrafts[index].image_source="uploaded";
@@ -2633,16 +2713,19 @@ function chooseProductPhotoUpload(index,img,status){
 }
 
 async function regenerateBatchPicture(index,button,img,status){
-  const item=batchDrafts[index];
+  const context=batchDraftContext,item=batchDrafts[index];
   if(!item) return;
   button.disabled=true;
   button.textContent="Generating…";
   try{
+    if(!context)return;
+    assertBatchDraft(context,item,index);
     const data=await callBatchFunction({
       mode:"image",
       english:item.english,
       spanish:item.spanish
     });
+    assertBatchDraft(context,item,index);
     const x=(data.items||[])[0];
     if(!x?.photo_data) throw new Error("No picture was returned.");
     batchDrafts[index].photo=x.photo_data;
@@ -2666,86 +2749,37 @@ function sizesForBatchSet(){
   return ["Business Card · 3.375 × 2 in"];
 }
 
+function lockBatchSaveControls(){
+  const locked=!!batchSaveJob&&!batchSaveJob.complete;
+  document.querySelectorAll('#batchReviewItems input,#batchReviewItems button,#batchSetSelect').forEach(el=>el.disabled=locked);
+}
 async function saveAllBatch(){
-  if(!batchDrafts.length){
-    alert("There aren't any labels left in this batch.");
-    return;
-  }
+  if(batchSaveJob?.busy || batchSaveJob?.complete)return;
+  if(!batchDrafts.length)return alert("There aren't any labels left in this batch.");
   const sizes=sizesForBatchSet();
-  if(!sizes.length){
-    alert("Choose an available size or combination first. Turn on label sizes in Settings if needed.");
-    return;
-  }
-  const btn=$("saveAllBatchBtn");
-  if(btn.disabled) return;
-  const saveNavigation=workflowNavigationVersion;
-  btn.disabled=true;
-  btn.textContent="Saving batch…";
-
+  if(!sizes.length)return alert("Choose an available size or combination first. Turn on label sizes in Settings if needed.");
+  const btn=$("saveAllBatchBtn"),nav=workflowNavigationVersion;
+  let job;
   try{
-    for(let i=0;i<batchDrafts.length;i++){
-      const draft=batchDrafts[i];
-      const english=(draft.english||"").trim();
-      const spanish=(draft.spanish||"").trim();
-      if(!english || !spanish) throw new Error(`Label ${i+1} needs both English and Spanish wording.`);
-      if(draft.needs_product_image || !draft.photo){
-        throw new Error(`"${english}" still needs a product photo. Upload the real photo, retry, or explicitly choose a representative picture.`);
-      }
-      const storedPhoto=await prepareCloudPhoto(draft.photo || "");
-
-      if(cloudReady){
-        let label=library.find(x=>
-          (x.english||"").toLowerCase()===english.toLowerCase() &&
-          (x.spanish||"").toLowerCase()===spanish.toLowerCase()
-        );
-
-        if(!label){
-          const savedRows=await restFetch("labels",{
-            method:"POST",
-            headers:{"Prefer":"return=representation"},
-            body:JSON.stringify({english,spanish,photo_data:storedPhoto})
-          });
-          const saved=savedRows?.[0];
-          if(!saved) throw new Error("A saved label was not returned by Supabase.");
-          label={id:saved.id,english:saved.english,spanish:saved.spanish,photo:saved.photo_data||""};
-        }
-
-        const rows=sizes.map(size=>({
-          label_id:label.id,
-          english,
-          spanish,
-          photo_data:storedPhoto,
-          size
-        }));
-        await restFetch("print_queue",{
-          method:"POST",
-          headers:{"Prefer":"return=representation"},
-          body:JSON.stringify(rows)
-        });
-      }else{
-        const base={english,spanish,photo:storedPhoto};
-        sizes.forEach(size=>queue.push({...base,size,id:crypto.randomUUID()}));
-        if(!library.some(x=>x.english===english && x.spanish===spanish)) library.push(base);
-      }
+    if(!batchDraftContext)throw sessionChangedError();
+    assertCloudContext(batchDraftContext);
+    if(!batchSaveJob){
+      // Validate the whole snapshot before the first master or queue record is written.
+      const items=batchDrafts.map((draft,i)=>{
+        const english=(draft.english||'').trim(),spanish=(draft.spanish||'').trim();
+        if(!english || !spanish)throw Error(`Label ${i+1} needs both English and Spanish wording.`);
+        if(draft.needs_product_image || !draft.photo)throw Error(`"${english}" still needs a product photo. Upload the real photo, retry, or explicitly choose a representative picture.`);
+        return {english,spanish,photo:draft.photo};
+      });
+      batchSaveJob=window.LittleLabelWorkflowSave.create(items,sizes,{context:batchDraftContext,reuseMasters:true});
     }
-
-    if(cloudReady) await loadCloudData();
-    else{refreshQueue();refreshLibrary();}
-    const savedCopies=batchDrafts.length*sizes.length;
-    batchDrafts=[];
-    $("batchListInput").value="";
-    $("productLinkInput").value="";
-    if(saveNavigation===workflowNavigationVersion){
-      show("queue");
-      showWorkflowSaveNotice('queue',savedCopies,cloudReady);
+    job=batchSaveJob;lockBatchSaveControls();btn.disabled=true;btn.textContent='Saving batch…';
+    if(await window.LittleLabelWorkflowSave.save(job,true)){
+      if(batchSaveJob===job){batchDrafts=[];$("batchListInput").value='';$("productLinkInput").value='';}
+      if(nav===workflowNavigationVersion){show('queue');showWorkflowSaveNotice('queue',job.queueRows.length,job.cloud);}
     }
-  }catch(err){
-    console.error(err);
-    alert("I couldn't save the whole batch: "+err.message);
-  }finally{
-    btn.disabled=false;
-    btn.textContent="Save & Add to Print";
-  }
+  }catch(error){console.error(error);alert(window.LittleLabelWorkflowSave.retryMessage(error));}
+  finally{if(!job || batchSaveJob===job){btn.disabled=false;btn.textContent=job&&!job.complete?'Retry Save':'Save & Add to Print';lockBatchSaveControls();}}
 }
 
 
@@ -2881,6 +2915,7 @@ document.querySelectorAll(".choice").forEach(c=>c.addEventListener("click",()=>{
 $("singleSize").addEventListener("change",updateSetSummary);
 $("addToQueue").addEventListener("click",addQueue);
 $("nextMaterialBtn").addEventListener("click",()=>{
+  beginSingleDraft();
   photoDataUrl="";
   rawRemovedPhotoDataUrl="";
   cleanedPhotoDataUrl="";
@@ -2945,21 +2980,21 @@ updateSetSummary();
 <script src="./v1-audit-polish.js?v=108"></script>
 <script src="./home-grid-order.js?v=108"></script>
 <script src="./onboarding-help.js?v=108"></script>
-<script src="./label-workflow-save.js?v=108"></script>
-<script src="./make-list-isolated.js?v=111"></script>
+<script src="./label-workflow-save.js?v=114"></script>
+<script src="./make-list-isolated.js?v=114"></script>
 <script src="./make-list-polish.js?v=111"></script>
 <script src="./smart-print-layout.js?v=108"></script>
 <script src="./name-labels.js?v=113"></script>
-<script src="./name-labels-queue.js?v=111"></script>
-<script src="./queue-library-polish.js?v=108"></script>
+<script src="./name-labels-queue.js?v=114"></script>
+<script src="./queue-library-polish.js?v=114"></script>
 <script src="./little-labels-theme.js?v=108"></script>
 <script src="./label-settings.js?v=112"></script>
 <script src="./language-settings.js?v=111"></script>
 <script src="./identification-language.js?v=108"></script>
 <script src="./confirmation-cleanup.js?v=108"></script>
-<script src="./type-a-label.js?v=111"></script>
+<script src="./type-a-label.js?v=114"></script>
 <script src="./blank-input-placeholders.js?v=108"></script>
-<script src="./sellable-label-wiring.js?v=112"></script>
+<script src="./sellable-label-wiring.js?v=114"></script>
 <script src="./sellable-label-render.js?v=108"></script>
 <script src="./name-only-render.js?v=113"></script>
 <script src="./true-size-rotation-fix.js?v=108"></script>
@@ -2967,7 +3002,7 @@ updateSetSummary();
 <script src="./home-settings-gear.js?v=108"></script>
 <script src="./print-blank-fix.js?v=108"></script>
 <script src="./pdf-print.js?v=108"></script>
-<script src="./pwa-version-fix.js?v=113"></script>
+<script src="./pwa-version-fix.js?v=114"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>
