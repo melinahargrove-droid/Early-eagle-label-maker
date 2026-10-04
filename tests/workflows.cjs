@@ -13,8 +13,10 @@ const root = path.resolve(__dirname, '..');
  await page.route('**/*',route=>{const url=route.request().url();if(url.startsWith('http://127.0.0.1:'))return route.continue();if(url.includes('.supabase.co/')){const body=url.includes('/auth/')?{access_token:'synthetic-test-token',refresh_token:'synthetic-refresh',expires_in:3600,user:{id:'synthetic-owner',email:'synthetic@example.invalid',is_anonymous:false,identities:[{}]}}:url.includes('/rpc/')?{active:true}:[];return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)})}return route.abort()});
  await page.goto(`http://127.0.0.1:${server.address().port}/`);
  await page.waitForFunction(()=>window.LittleLabelWorkflowSave&&window.NLStudents&&cloudReady);
- if(await page.locator('#llwStart').count())await page.locator('#llwStart').click();
  await page.evaluate(()=>LittleLabelsAccess.check());
+ // The welcome layer appears after its onboarding timer. Use its real control
+ // before testing the workflow instead of racing an immediate element count.
+ await page.locator('#llwStart').click();
  // Synthetic test state only: no real login, entitlement, or cloud requests.
  await page.evaluate(()=>{cloudReady=false;show('makeList')});
  await page.locator('#makeListInput').fill('Synthetic Blocks\nSynthetic Pencils');
@@ -40,6 +42,38 @@ const root = path.resolve(__dirname, '..');
  assert.ok(await page.evaluate(()=>queue.slice(2).every(x=>x.photo.startsWith('data:'))));
  assert.equal(await page.evaluate(()=>library.length),3);
  console.log('PASS real name-photo upload, two queue copies, one library record');
+ // Real phone-sized interactions for the clarified typed/review/save/print workflow.
+ await page.setViewportSize({width:390,height:844});
+ await page.evaluate(()=>show('home'));
+ await page.locator('#homeTypeBtn').click();
+ await page.locator('#tlEnglish').fill('Synthetic Typed Label');
+ await page.locator('#tlSecond').fill('Synthetic Translation');
+ await page.locator('#tlBack').click();
+ await page.locator('#homeTypeBtn').click();
+ assert.equal(await page.locator('#tlEnglish').inputValue(),'Synthetic Typed Label');
+ await page.locator('#tlNext').click();
+ await page.locator('#preview').waitFor({state:'visible'});
+ assert.equal(await page.locator('#labelEnglish').textContent(),'Synthetic Typed Label');
+ await page.locator('#englishInput').fill('Synthetic Reviewed Label');
+ await page.locator('#spanishInput').fill('Teacher-reviewed Translation');
+ await page.locator('#previewBack').click();
+ assert.equal(await page.locator('#tlEnglish').inputValue(),'Synthetic Reviewed Label');
+ assert.equal(await page.locator('#tlSecond').inputValue(),'Teacher-reviewed Translation');
+ await page.locator('#tlNext').click();
+ await page.locator('#chooseSetBtn').click();
+ await page.locator('#addToQueue').click();
+ await page.locator('#queue').waitFor({state:'visible'});
+ assert.match(await page.locator('#queueSaveNotice').textContent(),/session only/i);
+ const printBox=await page.locator('#mockSheets').boundingBox(),rowsBox=await page.locator('#queueItems').boundingBox();
+ assert.ok(printBox.y<rowsBox.y,'Print preview should precede the queue rows');
+ assert.equal(await page.locator('#mockSheets').textContent(),'Preview Print Sheets');
+ assert.equal(await page.locator('#queueItems .queue-actions button').first().textContent(),'Mark printed');
+ await page.locator('#mockSheets').click();
+ await page.locator('#printPreview').waitFor({state:'visible'});
+ await page.waitForFunction(()=>document.querySelectorAll('#sheetPreviewPages img').length>0);
+ assert.match(await page.locator('#printNowBtn').textContent(),/Open Print PDF/);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+ console.log('PASS 390px typed Back/review/save/print-preview workflow without horizontal overflow');
  // Controlled cloud adapter verifies bodies/retry/session ownership, without networking.
  const result=await page.evaluate(async()=>{
   currentUser={id:'synthetic-owner'};cloudReady=true;let fail=true;const labels=new Map(),printed=new Map(),calls=[];

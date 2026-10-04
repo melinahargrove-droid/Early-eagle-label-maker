@@ -330,15 +330,16 @@
         <p class="muted" id="foundConfidence"></p>
         <p class="tiny" id="foundNotes"></p>
       </div>
-      <button id="thatsRight" class="primary">✓ That's Right</button>
+      <button id="thatsRight" class="primary">Review Label →</button>
       <button id="editIdentification" class="secondary" style="margin-top:8px">✏️ Edit Wording</button>
     </div>
   </section>
 
   <section id="preview" class="hidden">
-    <button class="secondary" id="previewBack">← Back</button>
+    <button class="secondary" id="previewBack">← Edit Source</button>
     <div class="card">
-      <h2>Label Preview</h2>
+      <h2>Review Label</h2>
+      <p class="tiny">2 · Review wording and picture, then choose sizes</p>
       <p id="photoModeNote" class="muted">Using cleaned photo on white background.</p>
       <div id="labelCard" class="label-preview">
         <div class="label-image-wrap"><img id="labelPhoto" alt=""></div>
@@ -354,14 +355,14 @@
       <input id="spanishInput" autocomplete="off">
       <div id="translationStatus" class="tiny" style="margin-top:6px"></div>
 
-      <button id="chooseSetBtn" class="primary" style="margin-top:14px">Choose Label Set</button>
+      <button id="chooseSetBtn" class="primary" style="margin-top:14px">Review Sizes & Copies →</button>
     </div>
   </section>
 
   <section id="sets" class="hidden">
-    <button class="secondary" id="setsBack">← Label Preview</button>
+    <button class="secondary" id="setsBack">← Review Wording</button>
     <div class="card">
-      <h2>Which label set?</h2>
+      <h2>Review Sizes & Copies</h2>
       <p class="muted">Your two normal setups are one tap.</p>
 
       <div class="choice selected" data-set="matching">
@@ -388,7 +389,8 @@
       </div>
 
       <div class="card soft" id="setSummary" style="margin-bottom:10px"></div>
-      <button id="addToQueue" class="primary">✓ Add to Print Queue</button>
+      <button id="addToQueue" class="primary">Save &amp; Add to Print</button>
+      <div id="singleSaveStatus" class="tiny" role="status" aria-live="polite" style="margin-top:8px"></div>
     </div>
   </section>
 
@@ -449,7 +451,7 @@
       </select>
 
       <div id="batchReviewItems"></div>
-      <button id="saveAllBatchBtn" class="primary">✓ Save All + Add to Print Queue</button>
+      <button id="saveAllBatchBtn" class="primary">Save &amp; Add to Print</button>
     </div>
   </section>
 
@@ -457,10 +459,11 @@
     <button class="secondary" id="queueBack">← Home</button>
     <div class="card">
       <h2>Ready to Print</h2>
+      <div id="queueSaveNotice" class="status hidden" role="status" aria-live="polite"></div>
       <p class="muted" id="queueSummary">Nothing queued yet.</p>
+      <button id="mockSheets" class="primary hidden">Preview Print Sheets</button>
+      <button id="nextMaterialBtn" class="secondary hidden" style="margin-top:8px">＋ Add More Labels</button>
       <div id="queueItems"></div>
-      <button id="nextMaterialBtn" class="primary hidden">＋ Create Next Label</button>
-      <button id="mockSheets" class="secondary hidden" style="margin-top:8px">Create 8.5 × 11 Print Sheets</button>
     </div>
   </section>
 
@@ -491,6 +494,7 @@
     <button class="secondary" id="libraryBack">← Home</button>
     <div class="card">
       <h2>My Labels</h2>
+      <div id="librarySaveNotice" class="status hidden" role="status" aria-live="polite"></div>
       <p class="muted">Search your permanent label library and reprint without using AI again.</p>
       <label for="librarySearch">Search labels</label>
       <input id="librarySearch" type="search" placeholder="Try scissors, tijeras, blocks…" autocomplete="off">
@@ -601,7 +605,7 @@
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 110</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 111</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -1118,10 +1122,24 @@ const batchTranslationTimers = new Map();
 const batchTranslationRequestIds = new Map();
 let printBatchIds = [];
 let printLayoutPages = [];
+let currentCreationSource = 'photo';
+let workflowNavigationVersion = 0;
+
+function showWorkflowSaveNotice(destination, copies, cloud) {
+  const notice = $(destination === 'library' ? 'librarySaveNotice' : 'queueSaveNotice');
+  if(!notice) return;
+  notice.className = 'status ' + (cloud ? 'ok' : 'loading');
+  const ready = copies ? ` ${copies} cop${copies === 1 ? 'y is' : 'ies are'} ready to print.` : '';
+  notice.textContent = cloud
+    ? 'Saved to My Labels in your account.' + ready
+    : 'Added for this session only.' + ready + ' These labels will be lost if you close or reload the app.';
+}
 
 
 
 function show(id){
+  workflowNavigationVersion++;
+  ['queueSaveNotice','librarySaveNotice'].forEach(key=>$(key)?.classList.add('hidden'));
   if(id==='account'||id==='passwordRecovery'){
     // Dismiss creation/help layers, never the purchase/activation gate.
     const overlays={mlIsolated:'mli-hidden',nameLabelsOverlay:'hide',typeLabelOverlay:'tl-hidden',llSettings:'lls-hidden',llHelp:'llh-hidden',llAdmin:'lla-hidden'};
@@ -1131,7 +1149,7 @@ function show(id){
   sections.forEach(s => $(s).classList.toggle("hidden", s !== id));
   // Account and password recovery stay available; every return rechecks purchase access.
   window.LittleLabelsAccess?.onNavigate(id);
-  window.scrollTo({top:0, behavior:"smooth"});
+  window.scrollTo({top:0, behavior:"auto"});
 }
 function dataUrlFromFile(file){
   return new Promise((resolve,reject)=>{
@@ -1162,6 +1180,7 @@ function setStatus(text, cls){
 }
 async function handlePhoto(file){
   if(!file) return;
+  currentCreationSource='photo';
   try{
     $("retryIdentify").classList.add("hidden");
     setStatus("Preparing photo…","loading");
@@ -1444,7 +1463,7 @@ function syncLabel(){
   $("labelEnglish").textContent=$("englishInput").value || "Material";
   $("labelSpanish").textContent=$("spanishInput").value || "material";
   $("labelPhoto").src=activePhotoDataUrl || photoDataUrl;
-  $("photoModeNote").textContent = (activePhotoDataUrl && activePhotoDataUrl===cleanedPhotoDataUrl)
+  $("photoModeNote").textContent = currentCreationSource === 'typed' ? 'Text-only label.' : (activePhotoDataUrl && activePhotoDataUrl===cleanedPhotoDataUrl)
     ? `Using ${cleanupMode} cleanup on a true white background.`
     : "Using the original photo.";
 }
@@ -2076,7 +2095,7 @@ function refreshQueue(){
     const size=document.createElement("div"); size.className="tiny"; size.style.marginTop="3px"; size.textContent=item.size;
     left.append(name,spanish,size);
     const actions=document.createElement("div"); actions.className="queue-actions";
-    const printed=document.createElement("button"); printed.className="primary"; printed.textContent="✓ Printed";
+    const printed=document.createElement("button"); printed.className="secondary"; printed.textContent="Mark printed";
     printed.addEventListener("click",()=>markPrinted(item.id));
     const remove=document.createElement("button"); remove.className="secondary danger"; remove.textContent="Remove";
     remove.addEventListener("click",()=>removeQueueItem(item.id));
@@ -2653,6 +2672,7 @@ async function saveAllBatch(){
     return;
   }
   const btn=$("saveAllBatchBtn");
+  const saveNavigation=workflowNavigationVersion;
   btn.disabled=true;
   btn.textContent="Saving batch…";
 
@@ -2707,16 +2727,20 @@ async function saveAllBatch(){
 
     if(cloudReady) await loadCloudData();
     else{refreshQueue();refreshLibrary();}
+    const savedCopies=batchDrafts.length*sizes.length;
     batchDrafts=[];
     $("batchListInput").value="";
     $("productLinkInput").value="";
-    show("queue");
+    if(saveNavigation===workflowNavigationVersion){
+      show("queue");
+      showWorkflowSaveNotice('queue',savedCopies,cloudReady);
+    }
   }catch(err){
     console.error(err);
     alert("I couldn't save the whole batch: "+err.message);
   }finally{
     btn.disabled=false;
-    btn.textContent="✓ Save All + Add to Print Queue";
+    btn.textContent="Save & Add to Print";
   }
 }
 
@@ -2765,7 +2789,10 @@ $("queueBtn").addEventListener("click",()=>{refreshQueue();show("queue")});
 $("libraryBtn").addEventListener("click",()=>{refreshLibrary();show("library")});
 $("captureBack").addEventListener("click",()=>show("home"));
 $("confirmBack").addEventListener("click",()=>show("capture"));
-$("previewBack").addEventListener("click",()=>show("confirm"));
+$("previewBack").addEventListener("click",()=>{
+  if(currentCreationSource==='typed') window.LittleLabelsTypedLabel?.returnToInput();
+  else show("confirm");
+});
 $("setsBack").addEventListener("click",()=>show("preview"));
 $("queueBack").addEventListener("click",()=>show("home"));
 $("libraryBack").addEventListener("click",()=>show("home"));
@@ -2839,7 +2866,7 @@ $("spanishInput").addEventListener("input",()=>{
   syncLabel();
   $("translationStatus").textContent="Spanish edited manually";
 });
-$("chooseSetBtn").addEventListener("click",()=>{updateSetSummary();show("sets")});
+$("chooseSetBtn").addEventListener("click",()=>{$("singleSaveStatus").textContent='';updateSetSummary();show("sets")});
 document.querySelectorAll(".choice").forEach(c=>c.addEventListener("click",()=>{
   document.querySelectorAll(".choice").forEach(x=>x.classList.remove("selected"));
   c.classList.add("selected");
@@ -2915,27 +2942,27 @@ updateSetSummary();
 <script src="./home-grid-order.js?v=108"></script>
 <script src="./onboarding-help.js?v=108"></script>
 <script src="./label-workflow-save.js?v=108"></script>
-<script src="./make-list-isolated.js?v=110"></script>
-<script src="./make-list-polish.js?v=108"></script>
+<script src="./make-list-isolated.js?v=111"></script>
+<script src="./make-list-polish.js?v=111"></script>
 <script src="./smart-print-layout.js?v=108"></script>
-<script src="./name-labels.js?v=108"></script>
-<script src="./name-labels-queue.js?v=108"></script>
+<script src="./name-labels.js?v=111"></script>
+<script src="./name-labels-queue.js?v=111"></script>
 <script src="./queue-library-polish.js?v=108"></script>
 <script src="./little-labels-theme.js?v=108"></script>
 <script src="./label-settings.js?v=108"></script>
-<script src="./language-settings.js?v=110"></script>
+<script src="./language-settings.js?v=111"></script>
 <script src="./identification-language.js?v=108"></script>
 <script src="./confirmation-cleanup.js?v=108"></script>
-<script src="./type-a-label.js?v=110"></script>
+<script src="./type-a-label.js?v=111"></script>
 <script src="./blank-input-placeholders.js?v=108"></script>
-<script src="./sellable-label-wiring.js?v=108"></script>
+<script src="./sellable-label-wiring.js?v=111"></script>
 <script src="./sellable-label-render.js?v=108"></script>
 <script src="./true-size-rotation-fix.js?v=108"></script>
 <script src="./background-cleanup-toggle.js?v=108"></script>
 <script src="./home-settings-gear.js?v=108"></script>
 <script src="./print-blank-fix.js?v=108"></script>
 <script src="./pdf-print.js?v=108"></script>
-<script src="./pwa-version-fix.js?v=110"></script>
+<script src="./pwa-version-fix.js?v=111"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>
