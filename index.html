@@ -605,7 +605,7 @@
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 111</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 112</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -2671,14 +2671,18 @@ async function saveAllBatch(){
     alert("There aren't any labels left in this batch.");
     return;
   }
+  const sizes=sizesForBatchSet();
+  if(!sizes.length){
+    alert("Choose an available size or combination first. Turn on label sizes in Settings if needed.");
+    return;
+  }
   const btn=$("saveAllBatchBtn");
+  if(btn.disabled) return;
   const saveNavigation=workflowNavigationVersion;
   btn.disabled=true;
   btn.textContent="Saving batch…";
 
   try{
-    const sizes=sizesForBatchSet();
-
     for(let i=0;i<batchDrafts.length;i++){
       const draft=batchDrafts[i];
       const english=(draft.english||"").trim();
@@ -2945,24 +2949,24 @@ updateSetSummary();
 <script src="./make-list-isolated.js?v=111"></script>
 <script src="./make-list-polish.js?v=111"></script>
 <script src="./smart-print-layout.js?v=108"></script>
-<script src="./name-labels.js?v=111"></script>
+<script src="./name-labels.js?v=112"></script>
 <script src="./name-labels-queue.js?v=111"></script>
 <script src="./queue-library-polish.js?v=108"></script>
 <script src="./little-labels-theme.js?v=108"></script>
-<script src="./label-settings.js?v=108"></script>
+<script src="./label-settings.js?v=112"></script>
 <script src="./language-settings.js?v=111"></script>
 <script src="./identification-language.js?v=108"></script>
 <script src="./confirmation-cleanup.js?v=108"></script>
 <script src="./type-a-label.js?v=111"></script>
 <script src="./blank-input-placeholders.js?v=108"></script>
-<script src="./sellable-label-wiring.js?v=111"></script>
+<script src="./sellable-label-wiring.js?v=112"></script>
 <script src="./sellable-label-render.js?v=108"></script>
 <script src="./true-size-rotation-fix.js?v=108"></script>
 <script src="./background-cleanup-toggle.js?v=108"></script>
 <script src="./home-settings-gear.js?v=108"></script>
 <script src="./print-blank-fix.js?v=108"></script>
 <script src="./pdf-print.js?v=108"></script>
-<script src="./pwa-version-fix.js?v=111"></script>
+<script src="./pwa-version-fix.js?v=112"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>
