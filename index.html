@@ -1322,6 +1322,7 @@ function setStatus(text, cls){
   el.textContent=text;
   el.className="status " + cls;
   el.classList.remove("hidden");
+  if(cls==='error'&&!$("capture").classList.contains("hidden"))el.scrollIntoView?.({block:'center',behavior:'smooth'});
 }
 let photoWork=null,photoWorkRevision=0;
 function cancelPhotoWork(){
@@ -3036,7 +3037,7 @@ updateSetSummary();
 <script src="./ai-client.js?v=110"></script>
 <script src="./commercial-access.js?v=116"></script>
 <script src="./little-labels-admin.js?v=108"></script>
-<script src="./v1-audit-polish.js?v=108"></script>
+<script src="./v1-audit-polish.js?v=116"></script>
 <script src="./home-grid-order.js?v=108"></script>
 <script src="./onboarding-help.js?v=108"></script>
 <script src="./label-workflow-save.js?v=114"></script>

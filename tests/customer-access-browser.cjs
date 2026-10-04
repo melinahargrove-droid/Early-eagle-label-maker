@@ -35,6 +35,7 @@ const session=id=>({access_token:'synthetic-'+id,refresh_token:'synthetic-refres
   async function shot(page,name){if(out){fs.mkdirSync(out,{recursive:true});await page.screenshot({path:path.join(out,name+'.png'),fullPage:true})}}
   {
    const {page,model,close}=await fixture();await expect(page.locator('#llaCode')).toBeFocused();
+   assert.equal(await page.locator('#llaCode').evaluate(el=>getComputedStyle(el).outlineColor),'rgb(23, 55, 94)','Activation keyboard focus keeps its high-contrast outline after all theme patches');
    const dialog=page.getByRole('dialog',{name:'Activate Little Labels'});await expect(dialog).toBeVisible();
    for(let i=0;i<12;i++){await page.keyboard.press(i%2?'Tab':'Shift+Tab');assert.equal(await page.evaluate(()=>!!document.activeElement.closest('#llAccessGate')),true)}
    await page.keyboard.press('Escape');await expect(dialog).toBeVisible();assert.equal(await page.locator('.app').evaluate(el=>el.inert),true);
