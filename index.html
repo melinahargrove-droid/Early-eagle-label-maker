@@ -1023,13 +1023,14 @@ async function refreshCloudSession(refreshToken,context=captureCloudContext()){
   assertCloudContext(context,false);
   if(!refreshToken || cloudSession?.refresh_token!==refreshToken)throw sessionChangedError();
   if(refreshingSession?.revision===context.revision && refreshingSession.token===refreshToken)return refreshingSession.promise;
+  const expectedOwner=context.owner||cloudSession?.user?.id||null;
   const refresh={revision:context.revision,token:refreshToken};
   refresh.promise=(async()=>{
     const data=await authFetch("/auth/v1/token?grant_type=refresh_token",{
       method:"POST",body:JSON.stringify({refresh_token:refreshToken})
     }).catch(error=>{assertCloudContext(context,false);throw error;});
     assertCloudContext(context,false);
-    if(!data?.access_token || !data?.user || (context.owner&&data.user.id!==context.owner))throw sessionChangedError();
+    if(!data?.access_token || !data?.user || (expectedOwner&&data.user.id!==expectedOwner))throw sessionChangedError();
     saveCloudSession(data,true);
     return data;
   })();
@@ -1039,7 +1040,9 @@ async function refreshCloudSession(refreshToken,context=captureCloudContext()){
 async function ensureCloudSession(){
   const stored=loadStoredCloudSession();
   if(stored?.refresh_token){
-    saveCloudSession(stored);
+    // A stored token is only a refresh candidate. Do not expose its user as
+    // signed in (or check purchase access) before refresh has verified it.
+    cloudSession=stored;observeCloudSession();
     try{return await refreshCloudSession(stored.refresh_token);}catch(err){
       if(err.code==='SESSION_CHANGED')throw err;
       console.warn("Stored Supabase session could not refresh; creating a new anonymous session.",err);

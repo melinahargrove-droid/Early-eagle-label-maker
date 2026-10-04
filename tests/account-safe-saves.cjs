@@ -6,16 +6,18 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,8));
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject};};
 const response=(data=[],status=200)=>({ok:status<400,status,json:async()=>data});
 class Local extends ResourceLoader{fetch(url){const u=new URL(url);return u.hostname==='labels.test'&&u.pathname.endsWith('.js')?Promise.resolve(fs.readFileSync(path.join(root,u.pathname))):null;}}
-async function fixture(){
+async function fixture({slowStartup=false}={}){
+  const startupAuth=deferred();
   const errors=[],alerts=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));
   const dom=new JSDOM(fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/const SUPABASE_PUBLISHABLE_KEY\s*=\s*[^;]+;/,'const SUPABASE_PUBLISHABLE_KEY="synthetic-public-key";'),{
     url:'https://labels.test/',runScripts:'dangerously',resources:new Local(),pretendToBeVisual:true,virtualConsole:vc,
-    beforeParse(w){w.fetch=async()=>{throw Error('Synthetic offline');};w.scrollTo=()=>{};w.alert=m=>alerts.push(String(m));w.confirm=()=>true;w.TextEncoder=TextEncoder;
+    beforeParse(w){w.fetch=async()=>{if(slowStartup)return {ok:true,status:200,json:()=>startupAuth.promise};throw Error('Synthetic offline');};
+      if(slowStartup)w.localStorage.setItem('eea_label_maker_supabase_session_v1',JSON.stringify({access_token:'stored-A',refresh_token:'stored-r',user:{id:'stored-A',is_anonymous:false,email:'synthetic@example.invalid'}}));w.scrollTo=()=>{};w.alert=m=>alerts.push(String(m));w.confirm=()=>true;w.TextEncoder=TextEncoder;
       w.localStorage.setItem('littleLabelsWelcomeSeenV1','1');w.Image=class{constructor(){this.naturalWidth=this.naturalHeight=1;}set src(v){queueMicrotask(()=>this.onload?.());}};
       w.HTMLCanvasElement.prototype.getContext=()=>({fillRect(){},drawImage(){}});w.HTMLCanvasElement.prototype.toDataURL=()=> 'data:image/jpeg;base64,U1lOVEhFVElD';}
   });
   const w=dom.window;await new Promise(r=>w.addEventListener('load',r));await tick();
-  w.eval(`window.setAccount=(id,suffix='')=>{saveCloudSession({access_token:'token-'+id+suffix,refresh_token:'refresh-'+id+suffix,user:{id,is_anonymous:false,email:'synthetic@example.invalid',identities:[{}]}});cloudReady=true;updateAccountUI();};setAccount('A');`);
+  w.eval(`window.setAccount=(id,suffix='')=>{saveCloudSession({access_token:'token-'+id+suffix,refresh_token:'refresh-'+id+suffix,user:{id,is_anonymous:false,email:'synthetic@example.invalid',identities:[{}]}});cloudReady=true;updateAccountUI();};${slowStartup?'':"setAccount('A');"}`);
   await tick();
   const $=id=>w.document.getElementById(id),click=id=>$(id).click(),input=(id,value)=>{$(id).value=value;$(id).dispatchEvent(new w.Event('input',{bubbles:true}));};
   const db={labels:new Map(),print_queue:new Map(),posts:[],fail:null,before:null,failReads:false};
@@ -54,11 +56,35 @@ async function fixture(){
     await w.loadCloudData();
   }
   const copyButton=()=>[...w.document.querySelectorAll('#queueItems .queue-actions button')].find(b=>/Copy|Adding/.test(b.textContent));
-  return {w,dom,$,click,input,db,typed,product,reprint,seedCopy,copyButton,alerts,errors};
+  return {w,dom,$,click,input,db,typed,product,reprint,seedCopy,copyButton,alerts,errors,startupAuth};
 }
 let count=0;
 async function run(name,fn){const f=await fixture();try{await fn(f);await tick();assert.deepEqual(f.errors,[]);console.log('PASS '+name);count++;}finally{f.w.close();}}
 (async()=>{
+  {
+    const f=await fixture({slowStartup:true});
+    try{
+      assert.equal(f.w.eval('currentUser'),null,'Stored identity stays provisional until refresh verifies it');
+      assert.equal(f.$('llaAccountPane').classList.contains('lla-hidden'),false);
+      let checks=0;const status=deferred(),base=f.w.fetch;
+      f.w.fetch=(url,options)=>{if(url.includes('/rpc/little_labels_access_status')){checks++;return status.promise;}return base(url,options);};
+      assert.equal(checks,0);
+      f.startupAuth.resolve({access_token:'verified-A',refresh_token:'verified-r',user:{id:'stored-A',is_anonymous:false,email:'synthetic@example.invalid'}});await tick();
+      assert.equal(checks,1);assert.equal(f.$('llaCheckingPane').classList.contains('lla-hidden'),false);
+      status.resolve(response({active:false}));await tick();assert.equal(f.$('llaActivatePane').classList.contains('lla-hidden'),false);assert.deepEqual(f.errors,[]);
+      console.log('PASS slow restored session stays account-gated until verified, then checks purchase once');count++;
+    }finally{f.w.close();}
+  }
+  {
+    const f=await fixture({slowStartup:true});
+    try{
+      f.startupAuth.resolve({access_token:'wrong-owner',refresh_token:'wrong-r',user:{id:'different-owner',is_anonymous:false}});await tick();
+      assert.equal(f.w.eval('currentUser'),null);assert.equal(f.w.eval('cloudReady'),false);
+      assert.equal(JSON.parse(f.w.localStorage.getItem('eea_label_maker_supabase_session_v1')).user.id,'stored-A');
+      assert.equal(f.$('llaAccountPane').classList.contains('lla-hidden'),false);assert.deepEqual(f.errors,[]);
+      console.log('PASS restored refresh cannot publish a different owner than the cached session');count++;
+    }finally{f.w.close();}
+  }
   for(const same of [false,true])await run('delayed 401 cannot replay into '+(same?'replacement same-user':'another-user')+' session',async({w})=>{
     const wait=deferred(),calls=[];w.fetch=async(url,o)=>{if(url.includes('/rpc/'))return response({active:true});calls.push(o.headers.Authorization);return wait.promise;};
     const pending=w.restFetch('labels',{method:'POST',body:'[]'}).catch(e=>e);w.setAccount(same?'A':'B','-new');wait.resolve(response({},401));
