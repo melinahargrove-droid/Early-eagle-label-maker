@@ -20,6 +20,7 @@ jobs:
       - run: npm run test:browser
         env:
           PRODUCT_LINK_SCREENSHOTS: test-results/product-link
+          CUSTOMER_ACCESS_SCREENSHOTS: test-results/customer-access
       - name: Upload size-settings previews
         if: always()
         uses: actions/upload-artifact@v4
@@ -40,4 +41,11 @@ jobs:
         with:
           name: product-link-previews
           path: test-results/product-link/*.png
+          if-no-files-found: ignore
+      - name: Upload customer-access failure previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-access-previews
+          path: test-results/customer-access/*.png
           if-no-files-found: ignore
