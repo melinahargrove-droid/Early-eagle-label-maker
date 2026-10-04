@@ -298,7 +298,7 @@
         <input id="galleryInput" type="file" accept="image/*">
       </div>
       <img id="capturedPreview" class="preview-photo hidden" alt="Photo selected for identification">
-      <div id="identifyStatus" class="status hidden" aria-live="polite"></div>
+      <div role="status" aria-live="polite" id="identifyStatus" class="status hidden"></div>
       <button id="retryIdentify" class="secondary hidden">Try Identification Again</button>
     </div>
   </section>
@@ -578,7 +578,19 @@
         <label for="signInPassword">Password</label>
         <input id="signInPassword" type="password" autocomplete="current-password">
         <button id="signInBtn" class="secondary" style="margin-top:10px">Sign In</button>
-        <div id="signInStatus" class="status hidden"></div>
+        <div id="signInStatus" class="status hidden" role="status" aria-live="polite"></div>
+
+      </div>
+
+        <button id="forgotPasswordBtn" class="secondary" style="margin-top:10px" aria-expanded="false" aria-controls="passwordRequestPane">Forgot password?</button>
+      <div id="passwordRequestPane" class="hidden">
+        <h2>Reset Your Password</h2>
+        <p id="passwordRequestHelp" class="muted">Enter your account email. If an account exists, you'll receive a link to choose a new password. Check your spam folder too.</p>
+        <label for="passwordRequestEmail">Account email</label>
+        <input id="passwordRequestEmail" type="email" autocomplete="email" aria-describedby="passwordRequestHelp passwordRequestStatus">
+        <button id="requestPasswordBtn" class="primary" style="margin-top:10px">Send Reset Link</button>
+        <button id="cancelPasswordRequestBtn" class="secondary" style="margin-top:8px">Back to Sign In</button>
+        <div id="passwordRequestStatus" class="status hidden" role="status" aria-live="polite"></div>
       </div>
 
       <div id="permanentAccountPane" class="hidden">
@@ -592,7 +604,7 @@
   <section id="passwordRecovery" class="hidden">
     <div class="card">
       <h2>Set New Password</h2>
-      <p class="muted">You opened a Supabase password-recovery link. Choose a new password for your Early Eagle Label Maker account.</p>
+      <p class="muted">Choose a new password for your Little Labels account. Your saved labels stay with the same account.</p>
 
       <label for="recoveryPassword">New password</label>
       <input id="recoveryPassword" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters">
@@ -601,11 +613,13 @@
       <input id="recoveryPassword2" type="password" autocomplete="new-password" minlength="8">
 
       <button id="saveRecoveryPasswordBtn" class="primary" style="margin-top:10px">Save New Password</button>
-      <div id="recoveryStatus" class="status hidden" aria-live="polite"></div>
+      <div id="recoveryStatus" class="status hidden" role="status" aria-live="polite"></div>
+      <button id="newRecoveryLinkBtn" class="secondary" style="margin-top:10px">Request a New Reset Link</button>
+      <button id="recoveryBackBtn" class="secondary" style="margin-top:8px">Back to Account</button>
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 115</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 116</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -676,7 +690,7 @@ async function authFetch(path, options={}){
   try{data=await res.json();}catch{}
   if(!res.ok){
     const msg=data?.msg || data?.message || data?.error_description || data?.error || `Supabase auth error (${res.status})`;
-    throw new Error(msg);
+    const error=new Error(msg);error.status=res.status;error.code=data?.code||data?.error_code;throw error;
   }
   return data;
 }
@@ -696,7 +710,7 @@ async function userAuthFetch(path,options={}){
   assertCloudContext(context,false);
   if(!res.ok){
     const msg=data?.msg || data?.message || data?.error_description || data?.error || `Supabase account error (${res.status})`;
-    throw new Error(msg);
+    const error=new Error(msg);error.status=res.status;error.code=data?.code||data?.error_code;throw error;
   }
   return data;
 }
@@ -901,103 +915,109 @@ async function signOutPermanent(){
 }
 
 
+let recoveryContext=null,recoveryOperation=0,recoveryBusy=false,recoveryController=null;
+let passwordRequest=null,passwordRequestRevision=0,passwordRequestCooldown=0;
+function recoveryFieldsEnabled(enabled){
+  for(const id of ['recoveryPassword','recoveryPassword2','saveRecoveryPasswordBtn'])$(id).disabled=!enabled;
+}
+function cancelPasswordRequest(){
+  passwordRequestRevision++;passwordRequest?.controller.abort();passwordRequest=null;
+  $('requestPasswordBtn').disabled=false;$('requestPasswordBtn').textContent='Send Reset Link';
+  $('passwordRequestPane').classList.add('hidden');$('forgotPasswordBtn').setAttribute('aria-expanded','false');
+}
+function openPasswordRequest(){
+  cancelPasswordRequest();recoveryController?.abort();recoveryController=null;
+  recoveryOperation++;recoveryContext=null;recoveryBusy=false;clearSensitiveAuthFields();recoveryFieldsEnabled(false);
+  show('account');
+  $('passwordRequestEmail').value=$('signInEmail').value.trim();
+  $('passwordRequestPane').classList.remove('hidden');$('forgotPasswordBtn').setAttribute('aria-expanded','true');
+  $('passwordRequestStatus').classList.add('hidden');$('passwordRequestEmail').focus();
+}
+async function requestPasswordReset(){
+  if(passwordRequest)return;
+  const email=$('passwordRequestEmail').value.trim();
+  if(!email || !$('passwordRequestEmail').checkValidity()){
+    setAuthStatus('passwordRequestStatus','Enter a valid email address.','error');$('passwordRequestEmail').focus();return;
+  }
+  if(Date.now()<passwordRequestCooldown){setAuthStatus('passwordRequestStatus','Please wait a minute before requesting another reset link.','error');return;}
+  const controller=new AbortController(),revision=++passwordRequestRevision,context=captureCloudContext();
+  passwordRequest={controller,revision};const btn=$('requestPasswordBtn');btn.disabled=true;btn.textContent='Sending…';
+  setAuthStatus('passwordRequestStatus','Requesting your reset link…','loading');
+  const timeout=setTimeout(()=>controller.abort(),15000);
+  const current=()=>revision===passwordRequestRevision&&!$('passwordRequestPane').classList.contains('hidden')&&!$('account').classList.contains('hidden');
+  try{
+    // This is the existing Supabase recover API. No admin API or auth setting changes.
+    const redirect=window.location.origin+window.location.pathname;
+    await authFetch('/auth/v1/recover?redirect_to='+encodeURIComponent(redirect),{method:'POST',body:JSON.stringify({email}),signal:controller.signal});
+    assertCloudContext(context,false);if(!current())return;
+    passwordRequestCooldown=Date.now()+60000;
+    setAuthStatus('passwordRequestStatus','If an account exists for that email, a reset link is on its way. Check your inbox and spam folder.','ok');
+  }catch(error){
+    if(!current())return;
+    try{assertCloudContext(context,false)}catch{return;}
+    if(error.status===429){passwordRequestCooldown=Date.now()+60000;setAuthStatus('passwordRequestStatus','Too many requests. Please wait a minute, then try again.','error');}
+    else setAuthStatus('passwordRequestStatus','Could not request a reset link. Check your connection and try again.','error');
+  }finally{clearTimeout(timeout);if(revision===passwordRequestRevision){passwordRequest=null;btn.disabled=false;btn.textContent='Send Reset Link';}}
+}
 function parseAuthFragment(){
-  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
-  const params = new URLSearchParams(hash);
-  const type = params.get("type");
-  const access_token = params.get("access_token");
-  const refresh_token = params.get("refresh_token");
-  const expires_in = Number(params.get("expires_in") || 3600);
-  const token_type = params.get("token_type") || "bearer";
-
-  if(type === "recovery" && access_token){
-    return {type, access_token, refresh_token, expires_in, token_type};
-  }
-  return null;
+  const params=new URLSearchParams(window.location.hash.replace(/^#/,''));
+  if(params.get('error')||params.get('error_code'))return {invalid:true};
+  if(params.get('type')!=='recovery')return null;
+  return {access_token:params.get('access_token'),refresh_token:params.get('refresh_token')||'',expires_in:Number(params.get('expires_in')||3600),token_type:'bearer'};
 }
-
 async function startRecoveryFromUrl(){
-  const recovery = parseAuthFragment();
-  if(!recovery) return false;
-
-  const session = {
-    access_token: recovery.access_token,
-    refresh_token: recovery.refresh_token || "",
-    expires_in: recovery.expires_in,
-    token_type: recovery.token_type,
-    expires_at: Math.floor(Date.now()/1000) + recovery.expires_in
-  };
-
+  const recovery=parseAuthFragment();if(!recovery)return false;
+  const operation=++recoveryOperation,context=captureCloudContext(),controller=new AbortController();recoveryController=controller;
+  const timeout=setTimeout(()=>controller.abort(),15000);
+  // Remove credentials/errors from the visible URL before starting any request.
+  history.replaceState(null,'',window.location.pathname+window.location.search);
+  clearSensitiveAuthFields();recoveryFieldsEnabled(false);show('passwordRecovery');
+  setAuthStatus('recoveryStatus','Checking your reset link…','loading');
   try{
-    saveCloudSession(session);
-    clearSensitiveAuthFields();
-    cloudSession = session;
-    const user = await userAuthFetch("/auth/v1/user",{method:"GET"});
-    currentUser = user?.user || user || null;
-    cloudReady = true;
-
-    history.replaceState(null,"",window.location.pathname + window.location.search);
-    show("passwordRecovery");
+    if(recovery.invalid||!recovery.access_token||!Number.isFinite(recovery.expires_in)||recovery.expires_in<=0)throw Error('Invalid recovery link');
+    const data=await authFetch('/auth/v1/user',{method:'GET',headers:{Authorization:`Bearer ${recovery.access_token}`},signal:controller.signal});
+    assertCloudContext(context,false);if(operation!==recoveryOperation)return true;
+    const user=data?.user||data;if(!user?.id||!userIsPermanent(user))throw Error('Invalid recovery account');
+    saveCloudSession({...recovery,user,expires_at:Math.floor(Date.now()/1000)+recovery.expires_in});
+    cloudReady=true;updateAccountUI();recoveryContext=captureCloudContext();
+    recoveryFieldsEnabled(true);setAuthStatus('recoveryStatus','Link verified. Choose your new password below.','ok');$('recoveryPassword').focus();
     return true;
-  }catch(err){
-    console.error("Recovery-link error:",err);
-    history.replaceState(null,"",window.location.pathname + window.location.search);
-    setAuthStatus("recoveryStatus","That password-reset link could not be opened. Please request a new recovery email.","error");
-    show("passwordRecovery");
-    return true;
-  }
+  }catch(error){
+    if(operation!==recoveryOperation)return true;
+    recoveryContext=null;recoveryFieldsEnabled(false);
+    setAuthStatus('recoveryStatus','This reset link is expired or unavailable. Request a new reset link below.','error');
+    $('newRecoveryLinkBtn').focus();return true;
+  }finally{clearTimeout(timeout);if(recoveryController===controller)recoveryController=null;}
 }
-
 async function saveRecoveryPassword(){
-  const p1=$("recoveryPassword").value;
-  const p2=$("recoveryPassword2").value;
-
-  if(p1.length<8){
-    setAuthStatus("recoveryStatus","Use a password with at least 8 characters.","error");
-    return;
+  if(recoveryBusy)return;
+  const context=recoveryContext;
+  try{if(!context)throw Error();assertCloudContext(context,false)}catch{
+    recoveryContext=null;recoveryFieldsEnabled(false);setAuthStatus('recoveryStatus','Your recovery session changed or expired. Request a new reset link.','error');return;
   }
-  if(p1!==p2){
-    setAuthStatus("recoveryStatus","Those passwords don't match.","error");
-    return;
-  }
-  if(!cloudSession?.access_token){
-    setAuthStatus("recoveryStatus","The recovery session is missing. Request a new password-recovery email and open that new link.","error");
-    return;
-  }
-
-  const btn=$("saveRecoveryPasswordBtn");
-  btn.disabled=true;
-  btn.textContent="Saving…";
-
+  const p1=$('recoveryPassword').value,p2=$('recoveryPassword2').value;
+  if(p1.length<8){setAuthStatus('recoveryStatus','Use a password with at least 8 characters.','error');$('recoveryPassword').focus();return;}
+  if(p1!==p2){setAuthStatus('recoveryStatus',"Those passwords don't match.",'error');$('recoveryPassword2').focus();return;}
+  const operation=++recoveryOperation,nav=workflowNavigationVersion,controller=new AbortController();recoveryController=controller;
+  const timeout=setTimeout(()=>controller.abort(),15000);
+  recoveryBusy=true;recoveryFieldsEnabled(false);$('saveRecoveryPasswordBtn').textContent='Saving…';
   try{
-    const data=await userAuthFetch("/auth/v1/user",{
-      method:"PUT",
-      body:JSON.stringify({password:p1})
-    });
-
-    if(data?.user) currentUser=data.user;
-
-    if(cloudSession?.refresh_token){
-      try{
-        const refreshed=await refreshCloudSession(cloudSession.refresh_token);
-        if(refreshed?.user) currentUser=refreshed.user;
-      }catch{}
-    }
-
-    cloudReady=true;
-    updateAccountUI();
-    await loadCloudData();
-
-    clearSensitiveAuthFields();
-    setAuthStatus("recoveryStatus","✓ Password updated. You can now sign in on your laptop with this email and new password.","ok");
-    setTimeout(()=>show("home"),1200);
-  }catch(err){
-    console.error("Password recovery update error:",err);
-    setAuthStatus("recoveryStatus","I couldn't save the new password: "+err.message,"error");
-  }finally{
-    btn.disabled=false;
-    btn.textContent="Save New Password";
-  }
+    const data=await userAuthFetch('/auth/v1/user',{method:'PUT',body:JSON.stringify({password:p1}),signal:controller.signal});
+    assertCloudContext(context,false);if(operation!==recoveryOperation)return;
+    if(data?.user)currentUser=data.user;
+    assertCloudContext(context,false);if(operation!==recoveryOperation)return;
+    recoveryContext=null;clearSensitiveAuthFields();cloudReady=true;updateAccountUI();
+    setAuthStatus('recoveryStatus','Password updated. Your labels are still in this account.','ok');
+    // Sync owns its own status; a slow label read must not hide a successful password update.
+    loadCloudData().catch(()=>{});
+    if(operation===recoveryOperation&&nav===workflowNavigationVersion)setTimeout(()=>{
+      try{assertCloudContext(context,false);if(operation===recoveryOperation&&nav===workflowNavigationVersion)show('home')}catch{}
+    },1200);
+  }catch(error){
+    if(operation!==recoveryOperation)return;
+    if(error.code==='SESSION_CHANGED'||error.status===401||error.status===403){recoveryContext=null;clearSensitiveAuthFields();setAuthStatus('recoveryStatus','Your recovery session changed or expired. Request a new reset link.','error');}
+    else setAuthStatus('recoveryStatus',error.status===429?'Too many requests. Please wait a minute, then try again.':'Could not update your password. Check your connection and try again.','error');
+  }finally{clearTimeout(timeout);if(recoveryController===controller)recoveryController=null;if(operation===recoveryOperation){recoveryBusy=false;recoveryFieldsEnabled(!!recoveryContext);$('saveRecoveryPasswordBtn').textContent='Save New Password';}}
 }
 
 function saveCloudSession(session,preserve=false){
@@ -1228,6 +1248,8 @@ let workflowNavigationVersion = 0;
 
 document.addEventListener('little-label-account-changed',()=>{
   clearSensitiveAuthFields();
+  cancelPhotoWork();cancelPasswordRequest();
+  if(recoveryContext||recoveryBusy){recoveryController?.abort();recoveryController=null;recoveryOperation++;recoveryContext=null;recoveryBusy=false;recoveryFieldsEnabled(false);setAuthStatus('recoveryStatus','Your account changed. Request a new reset link.','error');}
   invalidateBatchAsyncWork();
   singleDraftContext=null;batchDraftContext=null;reprintDraftContext=null;
   singleSaveJob=null;batchSaveJob=null;reprintSaveJob=null;reprintSaveJobs.clear();
@@ -1257,6 +1279,9 @@ function showWorkflowSaveNotice(destination, copies, cloud) {
 
 
 function show(id){
+  cancelPhotoWork();
+  if(id!=='account')cancelPasswordRequest();
+  if(id!=='passwordRecovery'&&(recoveryContext||recoveryController||recoveryBusy)){recoveryOperation++;recoveryController?.abort();recoveryController=null;recoveryContext=null;recoveryBusy=false;clearSensitiveAuthFields();recoveryFieldsEnabled(false);}
   workflowNavigationVersion++;
   invalidateBatchAsyncWork();
   ['queueSaveNotice','librarySaveNotice'].forEach(key=>$(key)?.classList.add('hidden'));
@@ -1298,25 +1323,31 @@ function setStatus(text, cls){
   el.className="status " + cls;
   el.classList.remove("hidden");
 }
+let photoWork=null,photoWorkRevision=0;
+function cancelPhotoWork(){
+  photoWorkRevision++;photoWork?.controller.abort();photoWork=null;
+  if($('retryIdentify')){$('retryIdentify').disabled=false;$('retryIdentify').textContent='Try Again';}
+}
+function newPhotoWork(){
+  cancelPhotoWork();const work={revision:photoWorkRevision,nav:workflowNavigationVersion,context:singleDraftContext,controller:new AbortController()};photoWork=work;return work;
+}
+function assertPhotoWork(work){
+  if(photoWork!==work||work.revision!==photoWorkRevision||work.nav!==workflowNavigationVersion){const error=Error('Photo task cancelled');error.code='STALE_PHOTO';throw error;}
+  assertSingleDraft(work.context);
+}
 async function handlePhoto(file){
-  if(!file) return;
-  beginSingleDraft();
-  const context=singleDraftContext;
-  currentCreationSource='photo';
+  if(!file)return;
+  show('capture');beginSingleDraft();currentCreationSource='photo';
+  const work=newPhotoWork();photoDataUrl='';$('capturedPreview').classList.add('hidden');
+  $('retryIdentify').classList.add('hidden');setStatus('Preparing photo…','loading');
   try{
-    $("retryIdentify").classList.add("hidden");
-    setStatus("Preparing photo…","loading");
-    const prepared=await compressImage(file);
-    assertSingleDraft(context);
-    photoDataUrl=prepared;
-    $("capturedPreview").src=photoDataUrl;
-    $("capturedPreview").classList.remove("hidden");
-    await identify();
-  }catch(err){
-    if(err.code==='SESSION_CHANGED')return;
-    console.error(err);
-    setStatus("I couldn't prepare that photo. Please try another picture.","error");
-  }
+    const prepared=await compressImage(file);assertPhotoWork(work);photoDataUrl=prepared;
+    $('capturedPreview').src=prepared;$('capturedPreview').classList.remove('hidden');
+    await identify(work);
+  }catch(error){
+    if(photoWork!==work||error.code==='SESSION_CHANGED'||error.code==='STALE_PHOTO')return;
+    setStatus("Couldn't read that photo. Choose a different picture and try again.",'error');
+  }finally{if(photoWork===work)photoWork=null;}
 }
 function blobToDataUrl(blob){
   return new Promise((resolve,reject)=>{
@@ -1508,38 +1539,29 @@ async function cleanBackground(){
     return false;
   }
 }
-async function identify(){
-  if(!photoDataUrl) return;
-  setStatus("✨ Identifying the classroom material…","loading");
-  $("retryIdentify").classList.add("hidden");
-  const context=singleDraftContext;
+async function identify(existingWork=null){
+  if(!photoDataUrl||(!existingWork&&photoWork))return;
+  const work=existingWork||newPhotoWork();
+  setStatus('Identifying the classroom material…','loading');$('retryIdentify').classList.add('hidden');$('retryIdentify').disabled=true;
+  const timeout=setTimeout(()=>work.controller.abort(),30000);
   try{
-    if(!context)return;
-    assertSingleDraft(context);
-    const response = await littleLabelsAIFetch(FUNCTION_URL,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({imageDataUrl:photoDataUrl})
-    });
-    let data;
-    try{ data=await response.json(); }catch{ data={}; }
-    if(!response.ok || !data.success || !data.identification){
-      throw new Error(data.details || data.error || `Request failed (${response.status})`);
-    }
-    assertSingleDraft(context);
-    identification=data.identification;
-    setStatus("✓ Identified!","ok");
-    activePhotoDataUrl=photoDataUrl;
-    populateConfirm();
-    show("confirm");
-    await cleanBackground();
-  }catch(err){
-    if(err.code==='SESSION_CHANGED')return;
-    console.error("Identification error:",err);
-    setStatus("Identification didn't work: " + err.message,"error");
-    $("retryIdentify").classList.remove("hidden");
-  }
+    assertPhotoWork(work);
+    const response=await littleLabelsAIFetch(FUNCTION_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageDataUrl:photoDataUrl}),signal:work.controller.signal});
+    let data;try{data=await response.json()}catch{data={};}assertPhotoWork(work);
+    if(!response.ok||!data.success||!data.identification){const error=Error('Identification unavailable');error.status=response.status;throw error;}
+    identification=data.identification;activePhotoDataUrl=photoDataUrl;setStatus('Identified!','ok');populateConfirm();
+    photoWork=null;show('confirm');await cleanBackground();
+  }catch(error){
+    if(photoWork!==work||error.code==='SESSION_CHANGED'||error.code==='STALE_PHOTO')return;
+    try{assertPhotoWork(work)}catch{return;}
+    const message=error.status===429?'The photo identification limit has been reached. Try again later, or use Type a Label to keep working.':
+      /sign-in expired|permanent account/i.test(error.message)?'Your sign-in expired. Open Account and sign in again before trying this photo.':
+      error.name==='AbortError'?'Photo identification took too long. Check your connection and try again.':
+      "Couldn't identify this photo. Check your connection, try again, or choose another picture.";
+    setStatus(message,'error');$('retryIdentify').classList.remove('hidden');
+  }finally{clearTimeout(timeout);if(photoWork===work){photoWork=null;$('retryIdentify').disabled=false;}}
 }
+
 function populateConfirm(){
   $("confirmPhoto").src=activePhotoDataUrl || photoDataUrl;
   $("foundEnglish").textContent=identification.english || "";
@@ -2874,6 +2896,12 @@ $("homeGalleryBtn").addEventListener("click",()=>{
 $("homeProductBtn").addEventListener("click",()=>openDedicatedBatch("link"));
 $("homeListBtn").addEventListener("click",()=>show("makeList"));
 $("saveRecoveryPasswordBtn").addEventListener("click",saveRecoveryPassword);
+$('forgotPasswordBtn').addEventListener('click',openPasswordRequest);
+$('newRecoveryLinkBtn').addEventListener('click',openPasswordRequest);
+$('requestPasswordBtn').addEventListener('click',requestPasswordReset);
+$('passwordRequestEmail').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();requestPasswordReset();}});
+$('cancelPasswordRequestBtn').addEventListener('click',()=>{cancelPasswordRequest();$('forgotPasswordBtn').focus();});
+$('recoveryBackBtn').addEventListener('click',()=>{recoveryOperation++;recoveryContext=null;recoveryBusy=false;clearSensitiveAuthFields();show('account');$('accountBack').focus();});
 $("accountBtn").addEventListener("click",()=>{updateAccountUI();show("account")});
 $("accountBack").addEventListener("click",()=>show("home"));
 $("sendAccountCodeBtn").addEventListener("click",convertAnonymousEmail);
@@ -2922,55 +2950,9 @@ document.querySelectorAll(".reprint-choice").forEach(c=>c.addEventListener("clic
 $("reprintQueueBtn").addEventListener("click",addSavedLabelToQueue);
 $("cameraInput").addEventListener("change",e=>handlePhoto(e.target.files?.[0]));
 $("galleryInput").addEventListener("change",e=>handlePhoto(e.target.files?.[0]));
-$("homeGalleryInput").addEventListener("change",async e=>{
-  const file=e.target.files?.[0];
-  if(!file) return;
-
-  // Show a compact temporary status on Home instead of opening Photograph Material.
-  const cloud=$("cloudStatus");
-  const oldText=cloud.textContent;
-  const oldClass=cloud.className;
-  cloud.textContent="✨ Preparing and identifying your photo…";
-  cloud.className="status loading";
-  cloud.classList.remove("hidden");
-
-  try{
-    await handlePhoto(file);
-  }finally{
-    // identify() will navigate to confirmation on success.
-    // If we are still on Home, restore the normal compact Home state.
-    if(!$("home").classList.contains("hidden")){
-      cloud.textContent=oldText;
-      cloud.className=oldClass;
-      cloud.classList.add("hidden");
-    }
-  }
-});
-
-$("homeCameraInput").addEventListener("change",async e=>{
-  const file=e.target.files?.[0];
-  if(!file) return;
-
-  // Stay on Home while the camera photo is prepared and identified.
-  const cloud=$("cloudStatus");
-  const oldText=cloud.textContent;
-  const oldClass=cloud.className;
-  cloud.textContent="✨ Preparing and identifying your photo…";
-  cloud.className="status loading";
-  cloud.classList.remove("hidden");
-
-  try{
-    await handlePhoto(file);
-  }finally{
-    // identify() opens confirmation on success. If it failed, restore Home.
-    if(!$("home").classList.contains("hidden")){
-      cloud.textContent=oldText;
-      cloud.className=oldClass;
-      cloud.classList.add("hidden");
-    }
-  }
-});
-$("retryIdentify").addEventListener("click",identify);
+$('homeGalleryInput').addEventListener('change',e=>handlePhoto(e.target.files?.[0]));
+$('homeCameraInput').addEventListener('change',e=>handlePhoto(e.target.files?.[0]));
+$('retryIdentify').addEventListener('click',()=>identify());
 $("thatsRight").addEventListener("click",()=>{populateConfirm();show("preview")});
 $("editIdentification").addEventListener("click",()=>{populateConfirm();show("preview");$("englishInput").focus()});
 $("englishInput").addEventListener("input",()=>{
@@ -3052,22 +3034,22 @@ updateSetSummary();
 
 <!-- LITTLE_LABELS_DIRECT_PATCHES_START -->
 <script src="./ai-client.js?v=110"></script>
-<script src="./commercial-access.js?v=109"></script>
+<script src="./commercial-access.js?v=116"></script>
 <script src="./little-labels-admin.js?v=108"></script>
 <script src="./v1-audit-polish.js?v=108"></script>
 <script src="./home-grid-order.js?v=108"></script>
 <script src="./onboarding-help.js?v=108"></script>
 <script src="./label-workflow-save.js?v=114"></script>
-<script src="./make-list-isolated.js?v=114"></script>
+<script src="./make-list-isolated.js?v=116"></script>
 <script src="./make-list-polish.js?v=111"></script>
 <script src="./smart-print-layout.js?v=108"></script>
-<script src="./name-labels.js?v=113"></script>
+<script src="./name-labels.js?v=116"></script>
 <script src="./name-labels-queue.js?v=114"></script>
 <script src="./queue-library-polish.js?v=114"></script>
 <script src="./little-labels-theme.js?v=108"></script>
 <script src="./label-settings.js?v=112"></script>
 <script src="./language-settings.js?v=111"></script>
-<script src="./identification-language.js?v=108"></script>
+<script src="./identification-language.js?v=116"></script>
 <script src="./confirmation-cleanup.js?v=108"></script>
 <script src="./type-a-label.js?v=114"></script>
 <script src="./blank-input-placeholders.js?v=108"></script>
@@ -3079,7 +3061,7 @@ updateSetSummary();
 <script src="./home-settings-gear.js?v=108"></script>
 <script src="./print-blank-fix.js?v=108"></script>
 <script src="./pdf-print.js?v=108"></script>
-<script src="./pwa-version-fix.js?v=115"></script>
+<script src="./pwa-version-fix.js?v=116"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>

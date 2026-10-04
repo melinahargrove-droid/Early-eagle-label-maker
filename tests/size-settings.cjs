@@ -66,7 +66,16 @@ async function fixture({ stored = {}, fullApp = false } = {}) {
     }
   });
   const w = dom.window;
-  if (fullApp) await new Promise(resolve => w.addEventListener('load', resolve, { once: true }));
+  if (fullApp) {
+    await new Promise(resolve => w.addEventListener('load', resolve, { once: true }));
+    // Real access check with a synthetic permanent account. Focus assertions must
+    // exercise the signed-in UI, rather than programmatically reaching behind a gate.
+    const offlineFetch=w.fetch;
+    w.fetch=async()=>({ok:true,json:async()=>({active:true})});
+    w.eval("saveCloudSession({access_token:'synthetic-settings-token',user:{id:'synthetic-settings',is_anonymous:false,email:'synthetic@example.invalid',identities:[{}]}});updateAccountUI();");
+    await w.LittleLabelsAccess.check();
+    w.fetch=offlineFetch;
+  }
   else {
     w.eval(fs.readFileSync(path.join(root, 'label-settings.js'), 'utf8'));
     if (w.document.readyState === 'loading') await new Promise(resolve => w.document.addEventListener('DOMContentLoaded', resolve, { once: true }));
