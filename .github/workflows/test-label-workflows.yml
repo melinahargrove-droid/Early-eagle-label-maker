@@ -25,3 +25,10 @@ jobs:
           name: size-settings-previews
           path: test-results/size-settings-*.png
           if-no-files-found: ignore
+      - name: Upload name-only label previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: name-only-label-previews
+          path: test-results/name-only-*.png
+          if-no-files-found: ignore
