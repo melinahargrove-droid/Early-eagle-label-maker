@@ -27,6 +27,7 @@ ${html.slice(start, end)}
 </script>
 ${scripts.map(file => `${file === 'name-only-render.js' ? '<script>window.__priorRenderer=window.rasterizeFinishedLabel;</script>' : ''}<script src="/${file}"></script>`).join('\n')}
 </body></html>`;
+const buttonMarkup = markup.replace('<script src="/pdf-print.js"></script>', '<script src="/print-blank-fix.js"></script><script src="/pdf-print.js"></script>').replace('<script src="/name-labels.js"></script>', '<script>document.getElementById("printNowBtn").addEventListener("click", printCurrentSheets);</script><script src="/name-labels.js"></script>');
 const names = ['Mia', 'Alexandria', 'Alexandria Chrysanthemum Montgomery', 'Jean Baptiste de la Fleur Étoile', 'Zoë Álvarez O’Neill', 'E\u0301lodie Noe\u0308lle', 'AlexandriaChrysanthemumMontgomeryWinterbottom', '  Ana   María  de la   Cruz  ', 'gjpqy', 'JÁ'];
 const normalize = value => String(value || '').trim().replace(/\s+/g, ' ');
 const near = (actual, expected, tolerance, label) => assert.ok(Math.abs(actual - expected) <= tolerance, `${label}: ${actual} vs ${expected}`);
@@ -35,9 +36,10 @@ const near = (actual, expected, tolerance, label) => assert.ok(Math.abs(actual -
   const unexpected = [], errors = [];
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url, 'http://localhost').pathname;
+    if (pathname === '/__name-only-button-test.html') { res.setHeader('Content-Type', 'text/html'); res.end(buttonMarkup); return; }
     if (pathname === '/__name-only-test.html') { res.setHeader('Content-Type', 'text/html'); res.end(markup); return; }
     const file = pathname.slice(1);
-    if (!dependencies.has(file)) { res.writeHead(404).end(); return; }
+    if (!dependencies.has(file) && file !== 'print-blank-fix.js') { res.writeHead(404).end(); return; }
     res.setHeader('Content-Type', 'text/javascript'); res.end(read(file));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -63,7 +65,7 @@ const near = (actual, expected, tolerance, label) => assert.ok(Math.abs(actual -
       window.__textCalls = [];
       const fillText = CanvasRenderingContext2D.prototype.fillText;
       CanvasRenderingContext2D.prototype.fillText = function(text, ...args) {
-        if (window.__captureText) window.__textCalls.push({ text: String(text), font: this.font, args });
+        if (window.__captureText) { const m=this.measureText(String(text)); window.__textCalls.push({ text: String(text), font: this.font, args, metrics:{left:m.actualBoundingBoxLeft,right:m.actualBoundingBoxRight,ascent:m.actualBoundingBoxAscent,descent:m.actualBoundingBoxDescent} }); }
         return fillText.call(this, text, ...args);
       };
       window.__scanRaster = async src => {
@@ -85,26 +87,35 @@ const near = (actual, expected, tolerance, label) => assert.ok(Math.abs(actual -
     });
     const meta = await page.evaluate(() => LittleLabelSettings.meta);
     assert.equal(Object.keys(meta).length, 9);
-    let checked = 0;
+    let checked = 0; const offCenter = [];
+    const artifacts = path.resolve(process.env.NAME_ONLY_ARTIFACTS || path.join(root, 'test-results'));
+    fs.mkdirSync(artifacts, { recursive: true });
     for (const [id, m] of Object.entries(meta)) for (const name of names) {
-      const result = await page.evaluate(async ({ name, m }) => {
+      const result = await page.evaluate(async ({ id, name, m }) => {
         window.__textCalls = []; window.__captureText = true;
         const src = await rasterizeFinishedLabel({ english: name, spanish: '', photo: '', size: m.name });
         window.__captureText = false;
-        return { bounds: await __scanRaster(src), text: __textCalls };
-      }, { name, m });
+        const bounds = await __scanRaster(src), faceTop = id === 'cp' ? bounds.height / 2 : 0, faceH = bounds.height - faceTop;
+        const deltaX=(bounds.left+bounds.right+1)/2-bounds.width/2, deltaY=(bounds.top+bounds.bottom+1)/2-(faceTop+faceH/2);
+        return { bounds, text: __textCalls, diagnostic:Math.abs(deltaX)>2.5||Math.abs(deltaY)>2.5?src:null };
+      }, { id, name, m });
       const b = result.bounds, faceTop = id === 'cp' ? b.height / 2 : 0, faceH = b.height - faceTop, padding = Math.min(b.width, faceH) * .025;
       assert.equal(b.width, Math.round(m.w * 300)); assert.equal(b.height, Math.round(m.h * 300));
       assert.ok(b.ink > 0, `${id}: name has visible ink`);
       assert.ok(result.text.length >= 1 && result.text.length <= 2);
       assert.equal(normalize(result.text.map(call => call.text).join(' ')), normalize(name), `${id}: complete name survives wrapping`);
       assert.ok(b.left >= padding && b.right < b.width - padding && b.top >= faceTop + padding && b.bottom < b.height - padding, `${id}/${name}: visible face contains all ink`);
-      near((b.left + b.right + 1) / 2, b.width / 2, 2.5, `${id}/${name}: ink centered horizontally`);
-      near((b.top + b.bottom + 1) / 2, faceTop + faceH / 2, 2.5, `${id}/${name}: ink centered vertically`);
+      const deltaX=(b.left+b.right+1)/2-b.width/2, deltaY=(b.top+b.bottom+1)/2-(faceTop+faceH/2);
+      if (Math.abs(deltaX)>2.5 || Math.abs(deltaY)>2.5) {
+        offCenter.push({id,name,deltaX,deltaY,bounds:b,text:result.text});
+        fs.writeFileSync(path.join(artifacts, `name-only-diagnostic-${id}-${checked}.png`), Buffer.from(result.diagnostic.split(',')[1], 'base64'));
+      }
       if (name === 'Mia') assert.ok(b.bottom - b.top >= Math.min(b.width, faceH) * .28, `${id}: short name fills the body`);
       if (id === 'cp') assert.equal(b.upperInk, 0, 'Fold-behind flap has no name ink');
       checked++;
     }
+    console.log('Name-only pixel center diagnostics: '+JSON.stringify(offCenter));
+    assert.deepEqual(offCenter, [], 'Actual ink must be centered within 2.5 raster pixels');
     console.log(`PASS browser pixels: ${checked} synthetic name/format cases centered, large, complete and unclipped`);
 
     const preserved = await page.evaluate(async () => {
@@ -159,8 +170,6 @@ const near = (actual, expected, tolerance, label) => assert.ok(Math.abs(actual -
     await expect(page.locator('#nlPreview img')).toHaveCount(1);
     console.log('PASS all 9 Name Only mobile previews use exact print renderer, safe text, and latest-input/mode handling');
 
-    const artifacts = path.resolve(process.env.NAME_ONLY_ARTIFACTS || path.join(root, 'test-results'));
-    fs.mkdirSync(artifacts, { recursive: true });
     await page.locator('#nlNames').fill('Alexandria Chrysanthemum Montgomery');
     await page.locator('#nameLabelsOverlay [data-type="business"]').click();
     await page.locator('#nlPreview').scrollIntoViewIfNeeded();
@@ -213,6 +222,32 @@ const near = (actual, expected, tolerance, label) => assert.ok(Math.abs(actual -
     assert.deepEqual(errors, [], 'No runtime errors or unsafe-name execution');
     assert.deepEqual(unexpected, [], 'No remote/auth/activation/AI/write requests');
     console.log('PASS all-format screen/print/PDF raster parity, true dimensions and single packed rotation');
+    // Load both unchanged production print handlers in their actual order.
+    // The legacy native-print listener wins today; verify its actual DOM rather
+    // than claiming the standalone PDF-generator test covered this button path.
+    const buttonPage = await context.newPage();
+    buttonPage.on('pageerror', error => errors.push(error.stack || error.message));
+    buttonPage.on('dialog', async dialog => { errors.push('Unexpected dialog: ' + dialog.message()); await dialog.dismiss(); });
+    await buttonPage.goto(origin + '/__name-only-button-test.html', { waitUntil: 'load' });
+    const buttonExpected = await buttonPage.evaluate(async () => {
+      const items = Object.entries(LittleLabelSettings.meta).map(([id, m]) => ({ id: 'synthetic-button-' + id, english: 'Zoë Álvarez O’Neill', spanish: '', photo: '', size: m.name }));
+      printLayoutPages = buildPrintLayout(items); printBatchIds = items.map(item => item.id);
+      await renderPrintSheets();
+      window.__nativePrintCalls = 0; window.__nativePrintRasters = []; window.__buttonPdfBlob = null;
+      window.print = () => { __nativePrintCalls++; __nativePrintRasters = [...document.querySelectorAll('#printRoot img')].map(img => img.src); };
+      const createObjectURL = URL.createObjectURL.bind(URL);
+      URL.createObjectURL = blob => { if (blob.type === 'application/pdf') __buttonPdfBlob = blob; return createObjectURL(blob); };
+      window.open = () => ({ document: { write() {} }, location: { href: '' } });
+      return [...document.querySelectorAll('#sheetPreviewPages img')].map(img => img.src);
+    });
+    await buttonPage.locator('#printNowBtn').click();
+    await buttonPage.waitForFunction(() => __nativePrintCalls > 0 && !document.getElementById('printNowBtn').disabled);
+    const buttonResult = await buttonPage.evaluate(() => ({ calls: __nativePrintCalls, rasters: __nativePrintRasters, customPdfOpened: !!__buttonPdfBlob, ariaHidden: document.getElementById('printRoot').getAttribute('aria-hidden') }));
+    assert.equal(buttonResult.calls, 1); assert.equal(buttonResult.customPdfOpened, false);
+    assert.equal(buttonResult.ariaHidden, null); assert.equal(buttonExpected.length, 9);
+    assert.deepEqual(buttonResult.rasters, buttonExpected, 'Actual production native-print handler receives exact all-format centered preview rasters');
+    assert.deepEqual(errors, []); assert.deepEqual(unexpected, []);
+    console.log('PASS actual production print-button handler order: one native print, all 9 centered rasters, no handler changes');
     await context.close();
   } finally {
     if (browser) await browser.close();
