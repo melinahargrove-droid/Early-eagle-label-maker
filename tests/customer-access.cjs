@@ -7,9 +7,11 @@ const user=id=>({id,email:id+'@example.invalid',is_anonymous:false,identities:[{
 const session=id=>({access_token:'synthetic-'+id,refresh_token:'synthetic-refresh-'+id,expires_in:3600,user:user(id)});
 const response=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
 class Local extends ResourceLoader{fetch(url){const u=new URL(url);return u.origin==='https://labels.test'&&u.pathname.endsWith('.js')?Promise.resolve(fs.readFileSync(path.join(root,u.pathname))):null}}
-async function fixture({fragment='',purchased=true,authUser}={}){
+async function fixture({fragment='',purchased=true,authUser,captureTimeouts=false}={}){
+ const timeouts=new Map();let timerId=100000;
  const errors=[],calls=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));let hook=null;
  const dom=new JSDOM(fs.readFileSync(path.join(root,'index.html'),'utf8'),{url:'https://labels.test/?appv=116'+fragment,runScripts:'dangerously',resources:new Local(),pretendToBeVisual:true,virtualConsole:vc,beforeParse(w){
+  if(captureTimeouts){const set=w.setTimeout.bind(w),clear=w.clearTimeout.bind(w);w.setTimeout=(fn,ms,...args)=>{if(ms===15000||ms===30000){const id=++timerId;timeouts.set(id,()=>fn(...args));return id}return set(fn,ms,...args)};w.clearTimeout=id=>{if(timeouts.has(id))timeouts.delete(id);else clear(id)}}
   w.localStorage.setItem('littleLabelsWelcomeSeenV1','1');w.localStorage.setItem('eea_label_maker_supabase_session_v1',JSON.stringify(session('A')));
   w.fetch=async(url,o={})=>{const record={url:String(url),...o};calls.push(record);if(hook){const result=await hook(record);if(result!==undefined)return result}
    if(String(url).includes('/auth/v1/user'))return authUser?authUser(record):response(user('A'));
@@ -24,7 +26,7 @@ async function fixture({fragment='',purchased=true,authUser}={}){
  }});
  const w=dom.window;await new Promise(r=>w.addEventListener('load',r));await tick();
  const $=id=>w.document.getElementById(id),click=id=>$(id).click();
- return {w,$,click,calls,errors,setHook:f=>hook=f,close:()=>w.close(),input:(id,v)=>{$(id).value=v;$(id).dispatchEvent(new w.Event('input',{bubbles:true}))},switchAccount:id=>w.eval(`saveCloudSession(${JSON.stringify(session(id))});cloudReady=true;updateAccountUI();`)};
+ return {w,$,click,calls,errors,fireTimeouts:()=>{const pending=[...timeouts.values()];timeouts.clear();pending.forEach(fn=>fn())},setHook:f=>hook=f,close:()=>w.close(),input:(id,v)=>{$(id).value=v;$(id).dispatchEvent(new w.Event('input',{bubbles:true}))},switchAccount:id=>w.eval(`saveCloudSession(${JSON.stringify(session(id))});cloudReady=true;updateAccountUI();`)};
 }
 let count=0;
 async function run(name,fn,options){const f=await fixture(options);try{await fn(f);await tick();assert.deepEqual(f.errors,[]);console.log('PASS '+name);count++}finally{f.close()}}
@@ -94,5 +96,22 @@ const recovery='#type=recovery&access_token=synthetic-A&refresh_token=synthetic-
   let calls=0;f.w.fetch=async()=>{calls++;throw Error('Synthetic connection failure')};f.w.eval(fs.readFileSync(path.join(root,'identification-language.js'),'utf8'));
   await assert.rejects(f.w.fetch(f.w.eval('FUNCTION_URL'),{method:'POST',body:JSON.stringify({imageDataUrl:'synthetic'})}));assert.equal(calls,1);
  });
+ const untilAbort=r=>new Promise((resolve,reject)=>{r.signal.addEventListener('abort',()=>reject(new DOMException('Synthetic timed out','AbortError')),{once:true})});
+ await run('recovery verification timeout disables passwords and offers a new link',async f=>{
+  f.fireTimeouts();await tick();assert.match(f.$('recoveryStatus').textContent,/expired or unavailable/);assert.equal(f.$('saveRecoveryPasswordBtn').disabled,true);assert.equal(f.w.document.activeElement,f.$('newRecoveryLinkBtn'));
+ },{fragment:recovery,authUser:untilAbort,captureTimeouts:true});
+ await run('password PUT timeout leaves safe retry and clears its busy guard',async f=>{
+  f.setHook(r=>r.url.includes('/auth/v1/user')&&r.method==='PUT'?untilAbort(r):undefined);f.input('recoveryPassword','synthetic-password');f.input('recoveryPassword2','synthetic-password');f.click('saveRecoveryPasswordBtn');await tick();f.fireTimeouts();await tick();assert.match(f.$('recoveryStatus').textContent,/try again/);assert.equal(f.$('saveRecoveryPasswordBtn').disabled,false);assert.equal(f.w.eval('recoveryBusy'),false);
+ },{fragment:recovery,captureTimeouts:true});
+ await run('password email timeout leaves safe retry and clears its busy guard',async f=>{
+  f.w.show('account');f.click('forgotPasswordBtn');f.input('passwordRequestEmail','synthetic@example.invalid');f.setHook(r=>r.url.includes('/recover')?untilAbort(r):undefined);f.click('requestPasswordBtn');await tick();f.fireTimeouts();await tick();assert.match(f.$('passwordRequestStatus').textContent,/try again/);assert.equal(f.$('requestPasswordBtn').disabled,false);assert.equal(f.w.eval('passwordRequest'),null);
+ },{captureTimeouts:true});
+ await run('photo timeout keeps its visible retry and never navigates',async f=>{
+  f.setHook(r=>r.url.includes('/identify-material')?untilAbort(r):undefined);const pending=f.w.handlePhoto(new f.w.File(['synthetic'],'photo.png'));await tick();f.fireTimeouts();await pending;assert.match(f.$('identifyStatus').textContent,/took too long/);assert.equal(f.$('retryIdentify').classList.contains('hidden'),false);assert.equal(f.$('capture').classList.contains('hidden'),false);
+ },{captureTimeouts:true});
+ await run('activation renders only known public failures and generic server errors',async f=>{
+  f.input('llaCode','SYNTHETIC');f.setHook(r=>r.url.includes('/activate_little_labels')?response({success:false,error:'PRIVATE DATABASE DETAIL'}):undefined);f.click('llaActivate');await tick();assert.doesNotMatch(f.$('llaStatus').textContent,/PRIVATE/);assert.match(f.$('llaStatus').textContent,/could not be activated/);assert.equal(f.$('llaActivate').disabled,false);
+  f.setHook(r=>r.url.includes('/activate_little_labels')?response({message:'PRIVATE DATABASE DETAIL'},500):undefined);f.click('llaActivate');await tick();assert.doesNotMatch(f.$('llaStatus').textContent,/PRIVATE/);assert.match(f.$('llaStatus').textContent,/Check your connection/);
+ },{purchased:false});
  console.log('PASS '+count+' customer-access scenarios');
 })().catch(error=>{console.error(error);process.exitCode=1});

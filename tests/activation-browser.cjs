@@ -229,11 +229,11 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
     }
     {
       const activationDelay = deferred();
-      const f = await fixture({ user: permanent('synthetic-activation'), activate: (_r, n) => n === 1 ? { success: false, error: 'Synthetic invalid code' } : activationDelay.promise }); await f.ready();
+      const f = await fixture({ user: permanent('synthetic-activation'), activate: (_r, n) => n === 1 ? { success: false, error: 'That activation code was not found.' } : activationDelay.promise }); await f.ready();
       await gate(f.page, 'llaActivatePane');
       await f.page.locator('#llaCode').fill('SYNTHETIC-CODE');
       await f.page.locator('#llaActivate').click();
-      await expect(f.page.locator('#llaStatus')).toContainText('Synthetic invalid code');
+      await expect(f.page.locator('#llaStatus')).toContainText('That activation code was not found.');
       await expect(f.page.locator('#llaActivate')).toBeEnabled();
       await f.page.locator('#llaActivate').click();
       await expect.poll(() => f.model.activationCalls.length).toBe(2);

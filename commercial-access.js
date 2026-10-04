@@ -55,7 +55,7 @@
     try{r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`,{method:'POST',headers:{apikey:SUPABASE_PUBLISHABLE_KEY,Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(args),signal:controller.signal});}
     finally{clearTimeout(timer)}
     let d={};try{d=await r.json()}catch{}
-    if(!r.ok)throw Error(d?.message||d?.error||'Could not check access.');
+    if(!r.ok){const error=Error('Could not check access.');error.status=r.status;throw error;}
     return d;
   }
   function check(){
@@ -94,10 +94,13 @@
     try{
       const d=await rpc('activate_little_labels',{code_input:code});
       if(request!==revision||key!==identity())return;
-      if(!d?.success)throw Error(d?.error||'That code could not be activated.');
+      if(!d?.success){
+        const publicMessages=['Sign in with a permanent account first.','That activation code was not found.','That activation code is no longer active.','That activation code has already been used.'];
+        const error=Error('Activation failed');error.publicMessage=publicMessages.includes(d?.error)?d.error:'That code could not be activated. Check the code in your Start Here guide and try again.';throw error;
+      }
       active=true;activeIdentity=key;status.textContent='✓ Little Labels is activated!';
       render('activate');
-    }catch(e){if(request===revision&&key===identity())status.textContent=e.message||'That code could not be activated.'}
+    }catch(e){if(request===revision&&key===identity())status.textContent=e.publicMessage||(e.status===429?'Too many attempts. Please wait a minute, then try again.':'Could not activate right now. Check your connection and try again.')}
     finally{if(activatingIdentity===key)activatingIdentity='';btn.disabled=false;btn.textContent='Activate Little Labels';if(key===identity())render('activate')}
   }
   function onNavigate(id){
