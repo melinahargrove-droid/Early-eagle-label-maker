@@ -13,8 +13,10 @@ const root = path.resolve(__dirname, '..');
  await page.route('**/*',route=>{const url=route.request().url();if(url.startsWith('http://127.0.0.1:'))return route.continue();if(url.includes('.supabase.co/')){const body=url.includes('/auth/')?{access_token:'synthetic-test-token',refresh_token:'synthetic-refresh',expires_in:3600,user:{id:'synthetic-owner',email:'synthetic@example.invalid',is_anonymous:false,identities:[{}]}}:url.includes('/rpc/')?{active:true}:[];return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)})}return route.abort()});
  await page.goto(`http://127.0.0.1:${server.address().port}/`);
  await page.waitForFunction(()=>window.LittleLabelWorkflowSave&&window.NLStudents&&cloudReady);
- if(await page.locator('#llwStart').count())await page.locator('#llwStart').click();
  await page.evaluate(()=>LittleLabelsAccess.check());
+ // The welcome layer appears after its onboarding timer. Use its real control
+ // before testing the workflow instead of racing an immediate element count.
+ await page.locator('#llwStart').click();
  // Synthetic test state only: no real login, entitlement, or cloud requests.
  await page.evaluate(()=>{cloudReady=false;show('makeList')});
  await page.locator('#makeListInput').fill('Synthetic Blocks\nSynthetic Pencils');
