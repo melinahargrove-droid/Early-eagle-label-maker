@@ -427,8 +427,8 @@
 
       <div id="batchLinkPane" class="hidden">
         <label for="productLinkInput">Product page link</label>
-        <input id="productLinkInput" type="url" placeholder="https://www.lakeshorelearning.com/...">
-        <p class="tiny">The app will try to use the product page's real title and image first. If the site blocks that, it can make a representative picture instead.</p>
+        <input id="productLinkInput" type="url" placeholder="https://www.example.com/product">
+        <p class="tiny">Paste a public HTTPS product page. The app will use its title and photo when available. If the photo is unavailable, retry or upload your own product photo before saving.</p>
         <button id="createLinkDraftBtn" class="primary">Create Product Label</button>
       </div>
 
@@ -605,7 +605,7 @@
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 114</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 115</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -1202,6 +1202,12 @@ let batchDrafts = [];
 let batchMode = "list";
 const batchTranslationTimers = new Map();
 const batchTranslationRequestIds = new Map();
+let batchTranslationSequence = 0;
+let batchReviewVersion = 0;
+let batchLanguageVersion = 0;
+let lastBatchLanguage = 'es';
+let productLinkCreateRequest = null;
+const batchPhotoRequests = new Map();
 let printBatchIds = [];
 let printLayoutPages = [];
 let currentCreationSource = 'photo';
@@ -1222,6 +1228,7 @@ let workflowNavigationVersion = 0;
 
 document.addEventListener('little-label-account-changed',()=>{
   clearSensitiveAuthFields();
+  invalidateBatchAsyncWork();
   singleDraftContext=null;batchDraftContext=null;reprintDraftContext=null;
   singleSaveJob=null;batchSaveJob=null;reprintSaveJob=null;reprintSaveJobs.clear();
   selectedLibraryLabel=null;batchDrafts=[];
@@ -1251,6 +1258,7 @@ function showWorkflowSaveNotice(destination, copies, cloud) {
 
 function show(id){
   workflowNavigationVersion++;
+  invalidateBatchAsyncWork();
   ['queueSaveNotice','librarySaveNotice'].forEach(key=>$(key)?.classList.add('hidden'));
   if(id==='account'||id==='passwordRecovery'){
     // Dismiss creation/help layers, never the purchase/activation gate.
@@ -2318,6 +2326,7 @@ async function addSavedLabelToQueue(){
 }
 
 function setBatchMode(mode){
+  if(batchMode!==mode)invalidateBatchAsyncWork();
   batchMode=mode;
   $("batchListPane").classList.toggle("hidden",mode!=="list");
   $("batchLinkPane").classList.toggle("hidden",mode!=="link");
@@ -2415,105 +2424,183 @@ async function createListDrafts(){
   }
 }
 
+function batchLanguage(){
+  const id=window.LittleLabelSettings?.get?.().language || 'es';
+  return {id,name:window.LittleLabelSettings?.languages?.[id] || (id==='none'?'English Only':id==='es'?'Spanish':id)};
+}
+function invalidateBatchTranslation(index){
+  clearTimeout(batchTranslationTimers.get(index));
+  batchTranslationTimers.delete(index);
+  batchTranslationRequestIds.set(index,++batchTranslationSequence);
+}
+function invalidateBatchAsyncWork(){
+  productLinkCreateRequest=null;
+  const button=$('createLinkDraftBtn');
+  if(button){button.disabled=false;button.textContent='Create Product Label';}
+  batchTranslationTimers.forEach(clearTimeout);batchTranslationTimers.clear();
+  batchTranslationRequestIds.clear();
+  for(const operation of batchPhotoRequests.values()){
+    if(operation.button){operation.button.disabled=!!batchSaveJob&&!batchSaveJob.complete;operation.button.textContent=operation.buttonText;}
+  }
+  batchPhotoRequests.clear();
+}
+function captureBatchWork(context=batchDraftContext,item=null,index=null){
+  return {context,item,index,navigation:workflowNavigationVersion,review:batchReviewVersion,
+    language:batchLanguage(),languageVersion:batchLanguageVersion};
+}
+function batchWorkIsCurrent(work){
+  if(!work?.context || work.navigation!==workflowNavigationVersion
+    || work.languageVersion!==batchLanguageVersion || work.language.id!==batchLanguage().id
+    || (work.item && work.review!==batchReviewVersion))return false;
+  try{assertBatchDraft(work.context,work.item,work.index);return true;}catch{return false;}
+}
+function beginBatchPhotoWork(index,button=null){
+  const item=batchDrafts[index],work=captureBatchWork(batchDraftContext,item,index);
+  if(!item || !batchWorkIsCurrent(work))return null;
+  const previous=batchPhotoRequests.get(item);
+  if(previous?.button){previous.button.disabled=false;previous.button.textContent=previous.buttonText;}
+  work.button=button;work.buttonText=button?.textContent || '';
+  batchPhotoRequests.set(item,work);
+  return work;
+}
+function batchPhotoWorkIsCurrent(work){return batchWorkIsCurrent(work) && batchPhotoRequests.get(work.item)===work;}
+function finishBatchPhotoWork(work){
+  if(!work || batchPhotoRequests.get(work.item)!==work)return;
+  batchPhotoRequests.delete(work.item);
+  if(work.button){work.button.disabled=!!batchSaveJob&&!batchSaveJob.complete;work.button.textContent=work.buttonText;}
+}
+function batchTranslationValue(data,language){
+  if(language.id==='none')return '';
+  // A legacy Spanish-only response must never masquerade as another language.
+  const matching=data.target_language===language.id || data.language===language.id;
+  if(data.target_language && !matching)return '';
+  return data.translation ?? data.translated ?? data.text ?? ((language.id==='es'||matching)?data.spanish:'') ?? '';
+}
+function productPhotoResult(result){
+  const data=typeof result.photo_data==='string'?result.photo_data:'';
+  const photo=data.length<=8_000_100 && /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(data)?data:'';
+  return {photo,image_source:photo?(result.image_source || 'product'):'missing',needs_product_image:!photo || !!result.needs_product_image,needs_product_review:!!result.needs_product_review,notes:result.notes || ''};
+}
+
+async function validatedProductPhotoResult(result){
+  const photo=productPhotoResult(result);
+  if(!photo.photo)return photo;
+  const image=new Image();
+  const valid=await new Promise(resolve=>{
+    let finished=false;
+    const finish=value=>{if(finished)return;finished=true;clearTimeout(timer);image.onload=image.onerror=null;resolve(value);};
+    const timer=setTimeout(()=>finish(false),5000);
+    image.onload=()=>finish(image.naturalWidth>0 && image.naturalHeight>0 && image.naturalWidth<=10000 && image.naturalHeight<=10000 && image.naturalWidth*image.naturalHeight<=25000000);
+    image.onerror=()=>finish(false);image.src=photo.photo;
+  });
+  if(!valid)return {...photo,photo:'',image_source:'missing',needs_product_image:true,
+    notes:(photo.notes?photo.notes+' ':'')+'The product photo could not be displayed. Upload a product photo before saving.'};
+  return photo;
+}
+
 async function createProductLinkDraft(){
-  const url=$("productLinkInput").value.trim();
-  if(!url){
-    alert("Paste a product page link first.");
-    return;
+  const url=$('productLinkInput').value.trim();
+  if(!url){alert('Paste a product page link first.');return;}
+  let parsed;
+  try{parsed=new URL(url);}catch{}
+  if(!parsed || parsed.protocol!=='https:' || parsed.username || parsed.password){
+    setBatchProgress('Use a public HTTPS product page link without a username or password.','error');return;
   }
-  const btn=$("createLinkDraftBtn");
-  btn.disabled=true;
-  btn.textContent="Reading product page…";
-  setBatchProgress("Reading the product page and preparing the label…");
-
+  const active=productLinkCreateRequest;
+  if(active && batchWorkIsCurrent(active) && active.url===url)return;
   beginBatchDraft();
-  const context=batchDraftContext;
+  const work=captureBatchWork();work.url=url;productLinkCreateRequest=work;
+  const current=()=>productLinkCreateRequest===work && batchWorkIsCurrent(work) && $('productLinkInput').value.trim()===url;
+  const btn=$('createLinkDraftBtn');btn.disabled=true;btn.textContent='Reading product page…';
+  setBatchProgress('Reading the product page and preparing the label…');
   try{
-    const data=await callBatchFunction({mode:"url",url});
+    const data=await callBatchFunction({mode:'url',url,target_language:work.language.id});
+    if(!current())return;
     const x=(data.items||[])[0];
-    if(!x) throw new Error("No product label was returned.");
-    assertBatchDraft(context);
+    if(!x)throw new Error('No product label was returned.');
+    const photo=await validatedProductPhotoResult(x);
+    if(!current())return;
     batchDrafts=[{
-      id:crypto.randomUUID(),
-      original:url,
-      english:x.english || "",
-      spanish:x.spanish || "",
-      photo:x.photo_data || "",
-      image_source:x.image_source || "missing",
-      needs_product_image:!!x.needs_product_image,
-      product_url:url,
-      notes:x.notes || ""
+      id:crypto.randomUUID(),original:url,english:x.english || '',
+      spanish:batchTranslationValue(x,work.language),target_language:work.language.id,
+      ...photo,product_url:url
     }];
+    show('batchReview');
     renderBatchReview();
-    show("batchReview");
   }catch(err){
-    if(err.code==='SESSION_CHANGED')return;
+    if(!current())return;
     console.error(err);
-    setBatchProgress("I couldn't create that product label: "+err.message,"error");
+    setBatchProgress("I couldn't create that product label: "+err.message,'error');
   }finally{
-    if(batchDraftContext!==context)return;
-    btn.disabled=false;
-    btn.textContent="Create Product Label";
+    if(productLinkCreateRequest===work){productLinkCreateRequest=null;btn.disabled=false;btn.textContent='Create Product Label';}
   }
 }
 
-
-async function translateBatchItem(index, englishInput, spanishInput, status){
-  const context=batchDraftContext,item=batchDrafts[index];
-  const english=(englishInput.value||"").trim();
-  if(!english) return;
-
-  const requestId=(batchTranslationRequestIds.get(index)||0)+1;
-  batchTranslationRequestIds.set(index,requestId);
-  status.textContent="Translating Spanish…";
-
+async function translateBatchItem(index,englishInput,spanishInput,status){
+  const work=captureBatchWork(),item=batchDrafts[index];
+  work.item=item;work.index=index;
+  const english=(englishInput.value||'').trim(),manualValue=spanishInput.value;
+  invalidateBatchTranslation(index);
+  const requestId=batchTranslationRequestIds.get(index);
+  const current=()=>batchTranslationRequestIds.get(index)===requestId && batchWorkIsCurrent(work)
+    && englishInput.isConnected && spanishInput.isConnected
+    && english===englishInput.value.trim() && manualValue===spanishInput.value;
+  if(!item || !current())return;
+  if(work.language.id==='none'){
+    item.spanish='';item.translation_pending=false;spanishInput.value='';status.textContent='English-only labels are on.';return;
+  }
+  if(!english){item.translation_pending=false;status.textContent='Add English wording to translate.';return;}
+  item.translation_pending=true;
+  status.textContent=`Translating ${work.language.name}…`;
   try{
-    if(!context)return;
-    assertBatchDraft(context,item,index);
     const response=await littleLabelsAIFetch(TRANSLATE_URL,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({english})
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({english,target_language:work.language.id})
     });
-
-    let data={};
-    try{data=await response.json();}catch{}
-
-    if(batchTranslationRequestIds.get(index)!==requestId) return;
-
-    if(!response.ok || !data.success || !data.spanish){
-      throw new Error(data.error || data.details || `Request failed (${response.status})`);
-    }
-
-    assertBatchDraft(context,item,index);
-    spanishInput.value=data.spanish;
-    if(batchDrafts[index]){
-      batchDrafts[index].english=english;
-      batchDrafts[index].spanish=data.spanish;
-    }
-    status.textContent="✓ Spanish updated automatically";
+    let data={};try{data=await response.json();}catch{}
+    if(!current())return;
+    const translated=batchTranslationValue(data,work.language);
+    if(!response.ok || !data.success || !translated)throw new Error(data.error || data.details || `Request failed (${response.status})`);
+    spanishInput.value=translated;item.spanish=translated;item.target_language=work.language.id;item.translation_pending=false;
+    status.textContent=`✓ ${work.language.name} updated automatically`;
   }catch(err){
-    console.error("Batch auto-translation error:",err);
-    if(batchTranslationRequestIds.get(index)===requestId){
-      status.textContent="Spanish could not update automatically. You can still edit it manually.";
-    }
+    if(!current())return;
+    item.translation_pending=false;
+    console.error('Batch auto-translation error:',err);
+    status.textContent=`${work.language.name} could not update automatically. You can still edit it manually.`;
   }
 }
 
-function scheduleBatchTranslation(index, englishInput, spanishInput, status){
-  const existing=batchTranslationTimers.get(index);
-  if(existing) clearTimeout(existing);
-
-  status.textContent="Waiting for you to finish typing…";
-
+function scheduleBatchTranslation(index,englishInput,spanishInput,status){
+  invalidateBatchTranslation(index);
+  const work=captureBatchWork(batchDraftContext,batchDrafts[index],index),requestId=batchTranslationRequestIds.get(index);
+  if(work.item){
+    work.item.translation_pending=work.language.id!=='none';
+    if(work.item.product_url){work.item.spanish='';spanishInput.value='';}
+  }
+  if(work.language.id==='none'){
+    if(work.item)work.item.spanish='';spanishInput.value='';status.textContent='English-only labels are on.';return;
+  }
+  status.textContent='Waiting for you to finish typing…';
   const timer=setTimeout(()=>{
-    translateBatchItem(index,englishInput,spanishInput,status);
+    if(batchTranslationRequestIds.get(index)===requestId && batchWorkIsCurrent(work)
+      && englishInput.isConnected && spanishInput.isConnected)translateBatchItem(index,englishInput,spanishInput,status);
   },900);
-
   batchTranslationTimers.set(index,timer);
 }
 
+document.addEventListener('DOMContentLoaded',()=>{lastBatchLanguage=batchLanguage().id;});
+window.addEventListener('little-label-settings-changed',()=>{
+  const language=batchLanguage();
+  if(language.id===lastBatchLanguage)return;
+  lastBatchLanguage=language.id;batchLanguageVersion++;invalidateBatchAsyncWork();
+  // A retryable save keeps its original locked snapshot, including its language.
+  if(batchSaveJob && !batchSaveJob.complete)return;
+  if(batchDrafts.some(item=>item.product_url))renderBatchReview();
+});
+
 function renderBatchReview(){
+  batchReviewVersion++;
   batchTranslationTimers.forEach(timer=>clearTimeout(timer));
   batchTranslationTimers.clear();
   batchTranslationRequestIds.clear();
@@ -2522,6 +2609,13 @@ function renderBatchReview(){
   wrap.innerHTML="";
 
   batchDrafts.forEach((item,index)=>{
+    const language=item.product_url?batchLanguage():{id:'es',name:'Spanish'};
+    const languageChanged=!!item.product_url && item.target_language!==language.id;
+    if(item.product_url && !(batchSaveJob&&!batchSaveJob.complete)){
+      if(languageChanged || language.id==='none')item.spanish='';
+      if(languageChanged)item.translation_pending=language.id!=='none';
+      item.target_language=language.id;
+    }
     const card=document.createElement("div");
     card.className="batch-item";
 
@@ -2545,11 +2639,14 @@ function renderBatchReview(){
     eLabel.style.marginTop="0";
     const english=document.createElement("input");
     english.value=item.english;
+    english.id=`batchEnglish-${index}`;eLabel.htmlFor=english.id;
 
     const sLabel=document.createElement("label");
-    sLabel.textContent="Spanish";
+    sLabel.textContent=language.name;
     const spanish=document.createElement("input");
     spanish.value=item.spanish;
+    spanish.id=`batchSecond-${index}`;sLabel.htmlFor=spanish.id;
+    sLabel.hidden=spanish.hidden=language.id==='none';
 
     const status=document.createElement("div");
     status.className="batch-status";
@@ -2562,16 +2659,29 @@ function renderBatchReview(){
           : "Representative picture";
 
     english.addEventListener("input",()=>{
-      batchDrafts[index].english=english.value;
+      if(batchDrafts[index]!==item || (batchSaveJob&&!batchSaveJob.complete))return;
+      item.english=english.value;
       scheduleBatchTranslation(index,english,spanish,status);
     });
 
     spanish.addEventListener("input",()=>{
-      batchDrafts[index].spanish=spanish.value;
-      status.textContent="Spanish edited manually";
+      if(batchDrafts[index]!==item || (batchSaveJob&&!batchSaveJob.complete))return;
+      invalidateBatchTranslation(index);item.translation_pending=false;
+      item.spanish=language.id==='none'?'':spanish.value;
+      status.textContent=`${language.name} edited manually`;
     });
 
     fields.append(eLabel,english,sLabel,spanish,status);
+    if(item.product_url && item.notes){
+      const notes=document.createElement('p');notes.className='tiny product-import-notes';notes.textContent=item.notes;fields.append(notes);
+    }
+    const imageWork=captureBatchWork(batchDraftContext,item,index),renderedPhoto=item.photo;
+    img.addEventListener('error',()=>{
+      if(!batchWorkIsCurrent(imageWork) || !img.isConnected || item.photo!==renderedPhoto || !item.photo)return;
+      item.photo='';item.image_source='missing';item.needs_product_image=true;
+      item.notes='The product photo could not be displayed. Upload another product photo before saving.';
+      renderBatchReview();
+    },{once:true});
     grid.append(img,fields);
 
     const actions=document.createElement("div");
@@ -2601,7 +2711,9 @@ function renderBatchReview(){
         renderBatchReview();
       });
 
-      actions.append(retry,upload,representative,remove);
+      actions.append(retry,upload);
+      if(!item.product_url)actions.append(representative);
+      actions.append(remove);
     }else{
       const regen=document.createElement("button");
       regen.className="secondary";
@@ -2618,127 +2730,85 @@ function renderBatchReview(){
         renderBatchReview();
       });
 
-      actions.append(regen,remove);
+      if(!item.product_url)actions.append(regen);
+      actions.append(remove);
     }
 
     card.append(grid,actions);
     wrap.append(card);
+    if((languageChanged || item.translation_pending) && language.id!=='none' && !(batchSaveJob&&!batchSaveJob.complete) && !$('batchReview').classList.contains('hidden')){
+      scheduleBatchTranslation(index,english,spanish,status);
+    }
   });
   lockBatchSaveControls();
 }
 
 
 async function retryProductPhoto(index,button,img,status){
-  const context=batchDraftContext,item=batchDrafts[index];
-  if(!item?.product_url) return;
-
-  button.disabled=true;
-  button.textContent="Trying…";
-  status.textContent="Looking for the exact product photo again…";
-
+  const item=batchDrafts[index];
+  if(!item?.product_url)return;
+  const work=beginBatchPhotoWork(index,button);
+  if(!work)return;
+  button.disabled=true;button.textContent='Trying…';
+  status.textContent='Looking for the exact product photo again…';
   try{
-    if(!context)return;
-    assertBatchDraft(context,item,index);
-    const data=await callBatchFunction({mode:"url",url:item.product_url});
-    assertBatchDraft(context,item,index);
+    const data=await callBatchFunction({mode:'url',url:item.product_url,target_language:work.language.id});
+    if(!batchPhotoWorkIsCurrent(work))return;
     const x=(data.items||[])[0];
-    if(!x) throw new Error("No product result was returned.");
-
-    batchDrafts[index].english=x.english || item.english;
-    batchDrafts[index].spanish=x.spanish || item.spanish;
-    batchDrafts[index].photo=x.photo_data || "";
-    batchDrafts[index].image_source=x.image_source || "missing";
-    batchDrafts[index].needs_product_image=!!x.needs_product_image;
-    batchDrafts[index].notes=x.notes || "";
-
+    if(!x)throw new Error('No product result was returned.');
+    const photo=await validatedProductPhotoResult(x);
+    if(!batchPhotoWorkIsCurrent(work))return;
+    // Photo retry is deliberately photo-only: teacher wording wins, even mid-request edits.
+    Object.assign(item,photo);
     renderBatchReview();
   }catch(err){
-    console.error(err);
-    status.textContent="Exact product photo still couldn't be retrieved.";
-  }finally{
-    button.disabled=false;
-    button.textContent="↻ Try Product Photo Again";
-  }
+    if(!batchPhotoWorkIsCurrent(work))return;
+    console.error(err);status.textContent="Exact product photo still couldn't be retrieved. Please upload a product photo.";
+  }finally{finishBatchPhotoWork(work);}
 }
 
 function chooseProductPhotoUpload(index,img,status){
-  const context=batchDraftContext,item=batchDrafts[index];
-  const input=document.createElement("input");
-  input.type="file";
-  input.accept="image/*";
-  input.style.display="none";
-
-  input.addEventListener("change",async()=>{
+  const work=beginBatchPhotoWork(index);
+  if(!work)return;
+  const input=document.createElement('input');input.type='file';input.accept='image/*';input.style.display='none';
+  input.addEventListener('cancel',()=>{finishBatchPhotoWork(work);input.remove();});
+  input.addEventListener('change',async()=>{
     const file=input.files?.[0];
-    if(!file) return;
     try{
-      if(!context)return;
-      assertBatchDraft(context,item,index);
+      if(!file || !batchPhotoWorkIsCurrent(work))return;
+      if(file.type && !file.type.startsWith('image/'))throw new Error('Choose an image file.');
       const raw=await dataUrlFromFile(file);
+      if(!batchPhotoWorkIsCurrent(work))return;
       const image=new Image();
-      await new Promise((resolve,reject)=>{
-        image.onload=resolve;
-        image.onerror=reject;
-        image.src=raw;
-      });
-
-      const maxSide=1200;
-      const scale=Math.min(1,maxSide/Math.max(image.naturalWidth,image.naturalHeight));
-      const w=Math.max(1,Math.round(image.naturalWidth*scale));
-      const h=Math.max(1,Math.round(image.naturalHeight*scale));
-      const canvas=document.createElement("canvas");
-      canvas.width=w; canvas.height=h;
-      const ctx=canvas.getContext("2d");
-      ctx.fillStyle="#ffffff";
-      ctx.fillRect(0,0,w,h);
-      ctx.drawImage(image,0,0,w,h);
-
-      assertBatchDraft(context,item,index);
-      const dataUrl=canvas.toDataURL("image/jpeg",0.9);
-      batchDrafts[index].photo=dataUrl;
-      batchDrafts[index].image_source="uploaded";
-      batchDrafts[index].needs_product_image=false;
-      img.src=dataUrl;
-      status.textContent="✓ Your uploaded product photo";
+      await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=raw;});
+      if(!batchPhotoWorkIsCurrent(work))return;
+      const maxSide=1200,scale=Math.min(1,maxSide/Math.max(image.naturalWidth,image.naturalHeight));
+      const w=Math.max(1,Math.round(image.naturalWidth*scale)),h=Math.max(1,Math.round(image.naturalHeight*scale));
+      const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);ctx.drawImage(image,0,0,w,h);
+      Object.assign(work.item,{photo:canvas.toDataURL('image/jpeg',0.9),image_source:'uploaded',needs_product_image:false,notes:work.item.needs_product_review?'Check and edit the product wording before saving.':''});
       renderBatchReview();
     }catch(err){
-      alert("I couldn't use that product photo. Please try another image.");
-    }finally{
-      input.remove();
-    }
+      if(batchPhotoWorkIsCurrent(work))alert("I couldn't use that product photo. Please try another image.");
+    }finally{finishBatchPhotoWork(work);input.remove();}
   });
-
-  document.body.appendChild(input);
-  input.click();
+  document.body.appendChild(input);input.click();
 }
 
 async function regenerateBatchPicture(index,button,img,status){
-  const context=batchDraftContext,item=batchDrafts[index];
-  if(!item) return;
-  button.disabled=true;
-  button.textContent="Generating…";
+  const work=beginBatchPhotoWork(index,button);
+  if(!work)return;
+  button.disabled=true;button.textContent='Generating…';
   try{
-    if(!context)return;
-    assertBatchDraft(context,item,index);
-    const data=await callBatchFunction({
-      mode:"image",
-      english:item.english,
-      spanish:item.spanish
-    });
-    assertBatchDraft(context,item,index);
+    const data=await callBatchFunction({mode:'image',english:work.item.english,spanish:work.item.spanish,target_language:work.language.id});
+    if(!batchPhotoWorkIsCurrent(work))return;
     const x=(data.items||[])[0];
-    if(!x?.photo_data) throw new Error("No picture was returned.");
-    batchDrafts[index].photo=x.photo_data;
-    batchDrafts[index].image_source="generated";
-    batchDrafts[index].needs_product_image=false;
-    img.src=x.photo_data;
-    status.textContent="Representative picture";
+    if(!x?.photo_data)throw new Error('No picture was returned.');
+    Object.assign(work.item,{photo:x.photo_data,image_source:'generated',needs_product_image:false});
+    renderBatchReview();
   }catch(err){
-    alert("I couldn't make a new picture: "+err.message);
-  }finally{
-    button.disabled=false;
-    button.textContent="✨ New Picture";
-  }
+    if(batchPhotoWorkIsCurrent(work))alert("I couldn't make a new picture: "+err.message);
+  }finally{finishBatchPhotoWork(work);}
 }
 
 function sizesForBatchSet(){
@@ -2766,9 +2836,11 @@ async function saveAllBatch(){
     if(!batchSaveJob){
       // Validate the whole snapshot before the first master or queue record is written.
       const items=batchDrafts.map((draft,i)=>{
-        const english=(draft.english||'').trim(),spanish=(draft.spanish||'').trim();
-        if(!english || !spanish)throw Error(`Label ${i+1} needs both English and Spanish wording.`);
-        if(draft.needs_product_image || !draft.photo)throw Error(`"${english}" still needs a product photo. Upload the real photo, retry, or explicitly choose a representative picture.`);
+        const language=draft.product_url?batchLanguage():{id:'es',name:'Spanish'};
+        if(draft.product_url && language.id!=='none' && draft.translation_pending)throw Error(`Label ${i+1} is still translating ${language.name}. Wait for it or edit that line before saving.`);
+        const english=(draft.english||'').trim(),spanish=language.id==='none'?'':(draft.spanish||'').trim();
+        if(!english || (language.id!=='none' && !spanish))throw Error(`Label ${i+1} needs ${language.id==='none'?'English':`English and ${language.name}`} wording.`);
+        if(draft.needs_product_image || !draft.photo)throw Error(`"${english}" still needs a product photo. Upload the real product photo or retry.`);
         return {english,spanish,photo:draft.photo};
       });
       batchSaveJob=window.LittleLabelWorkflowSave.create(items,sizes,{context:batchDraftContext,reuseMasters:true});
@@ -2822,6 +2894,11 @@ $("listTabBtn").addEventListener("click",()=>setBatchMode("list"));
 $("linkTabBtn").addEventListener("click",()=>setBatchMode("link"));
 $("createBatchBtn").addEventListener("click",createListDrafts);
 $("createLinkDraftBtn").addEventListener("click",createProductLinkDraft);
+$("productLinkInput").addEventListener("input",()=>{
+  if(productLinkCreateRequest && productLinkCreateRequest.url!==$("productLinkInput").value.trim()){
+    invalidateBatchAsyncWork();$("batchProgress").classList.add("hidden");
+  }
+});
 $("saveAllBatchBtn").addEventListener("click",saveAllBatch);
 $("queueBtn").addEventListener("click",()=>{refreshQueue();show("queue")});
 $("libraryBtn").addEventListener("click",()=>{refreshLibrary();show("library")});
@@ -3002,7 +3079,7 @@ updateSetSummary();
 <script src="./home-settings-gear.js?v=108"></script>
 <script src="./print-blank-fix.js?v=108"></script>
 <script src="./pdf-print.js?v=108"></script>
-<script src="./pwa-version-fix.js?v=114"></script>
+<script src="./pwa-version-fix.js?v=115"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>
