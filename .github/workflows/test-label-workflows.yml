@@ -18,3 +18,10 @@ jobs:
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - name: Upload size-settings previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: size-settings-previews
+          path: test-results/size-settings-*.png
+          if-no-files-found: ignore

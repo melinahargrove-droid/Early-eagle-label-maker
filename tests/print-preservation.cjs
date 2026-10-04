@@ -2,7 +2,6 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..'),hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const files={
-  "label-settings.js": "47d478744f467f4104211aae8e8490515021190eeafb906528e2d0f07ab09249",
   "pdf-print.js": "71e2cf933d3f588ddc15372a5905e6667110b7d15036a4342e368da09eb4197b",
   "print-blank-fix.js": "ee0b7d69670e88f18126c8f8634e2eb888d08e2703195cf60963eac096ea4fca",
   "sellable-label-render.js": "b6c1dcbf38f447276bc9749470ed1e4bfe8f85c2d3a7ee7ce6c557c190e167cd",
@@ -33,4 +32,13 @@ const regions=[
   }
 ];
 for(const {file,start,end,hash:expected} of regions){const source=fs.readFileSync(path.join(root,file),'utf8');const a=source.indexOf(start),b=source.indexOf(end,a);assert.ok(a>=0&&b>a,`Missing print boundary in ${file}`);assert.equal(hash(source.slice(a,b)),expected,`${file} print implementation changed`);}
-console.log('PASS accepted print baseline: 8 files and 3 inline/layout regions are byte-identical');
+// Settings now has an editable UI. Its original format registry and default
+// combinations remain frozen independently, so UI copy/layout can evolve without
+// relaxing the physically accepted dimensions or packing/PDF checks above.
+const settingsSource=fs.readFileSync(path.join(root,'label-settings.js'),'utf8');
+for(const {name,hash:expected} of [{"name": "meta", "hash": "cd9001db72eef7789c46d3a5a41a6cd1d513ef697b6abd5d41c69ffbc1dc391f"}, {"name": "defaults", "hash": "49a8a4575bf05f9e6c6f5e4d82e266126fb95790bd7dad9520202d0d4695b72d"}]){
+  const match=settingsSource.match(new RegExp('const '+name+'=(\\{.*?\\});','s'));
+  assert.ok(match,`Missing settings ${name} boundary`);
+  assert.equal(hash(match[1]),expected,`Settings ${name} changed from the accepted print baseline`);
+}
+console.log('PASS accepted print baseline: 7 files, 3 inline/layout regions, exact format registry and default combinations');

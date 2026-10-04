@@ -21,8 +21,51 @@
   try{buildPrintLayout=smartLayout}catch{}
 
   let chosen={mode:'set',id:null};
-  function setSummary(){const box=document.getElementById('setSummary');if(!box)return;let sizes=[],name='';if(chosen.mode==='single'){const id=document.getElementById('singleSize')?.value;const m=meta()[id];if(m){sizes=[sizeString(id)];name='1 label'}}else{const set=eligibleSets().find(s=>s.id===chosen.id)||eligibleSets()[0];if(set){chosen.id=set.id;sizes=sizesFromSet(set);name=set.name}}box.innerHTML=`<strong>${name||'Choose a label set'}</strong>${sizes.length?'<br>'+sizes.map(s=>s.replace(' · ',' — ')).join('<br>'):''}`}
-  function renderCreateChoices(){const sec=document.getElementById('sets');if(!sec)return;sec.querySelectorAll(':scope .choice[data-set]').forEach(x=>x.style.display='none');let wrap=document.getElementById('llDynamicSets');const singleWrap=document.getElementById('singleSizeWrap');if(!wrap){wrap=document.createElement('div');wrap.id='llDynamicSets';singleWrap?.before(wrap)}wrap.innerHTML='';const sets=eligibleSets();if(chosen.mode==='set'&&!sets.some(s=>s.id===chosen.id))chosen.id=sets[0]?.id||null;sets.forEach(set=>{const d=document.createElement('div');d.className='choice ll-dynamic-choice'+(chosen.mode==='set'&&chosen.id===set.id?' selected':'');d.innerHTML=`<strong>${set.name}</strong><span>${(set.items||[]).map(([id,q])=>`${q} × ${meta()[id]?.name||id}`).join(' + ')}</span>`;d.onclick=()=>{chosen={mode:'set',id:set.id};renderCreateChoices();setSummary()};wrap.append(d)});const one=document.createElement('div');one.className='choice ll-dynamic-choice'+(chosen.mode==='single'?' selected':'');one.innerHTML='<strong>Just One Label</strong><span>Choose from your enabled label sizes</span>';one.onclick=()=>{chosen={mode:'single',id:null};renderCreateChoices();setSummary()};wrap.append(one);if(singleWrap){singleWrap.classList.toggle('hidden',chosen.mode!=='single');const sel=document.getElementById('singleSize');if(sel){const old=sel.value;sel.innerHTML='';enabledIds().forEach(id=>{const o=document.createElement('option');o.value=id;o.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;sel.append(o)});if(enabledIds().includes(old))sel.value=old;sel.onchange=setSummary}}const p=sec.querySelector('.card>p.muted');if(p)p.textContent='Choose one of your saved sets, or make just one label.';setSummary()}
+  const allSets=()=>settings().sets||[];
+  const setItems=set=>Array.isArray(set?.items)?set.items:[];
+  function unavailableReason(set){
+    const quantities=setItems(set).map(([,q])=>Number(q));
+    if(!quantities.length||quantities.some(q=>!Number.isSafeInteger(q)||q<1))return 'Edit this combination in Settings to choose sizes and whole-number copy counts.';
+    if(quantities.reduce((total,q)=>total+q,0)>100)return 'Edit this combination in Settings to use 100 copies or fewer in total. The saved combination has not been changed.';
+    const on=settings().sizes||{},off=[...new Set(setItems(set).filter(([id])=>!on[id]||!meta()[id]).map(([id])=>id))];
+    return off.length?'Turn on '+off.map(id=>meta()[id]?.name||id).join(' and ')+' in Settings → Available label sizes to use this combination.':'';
+  }
+  const selectableSets=()=>eligibleSets().filter(set=>!unavailableReason(set));
+  function setDetails(set){return setItems(set).map(([id,q])=>`${q} ${Number(q)===1?'copy':'copies'} of ${meta()[id]?.name||id} · ${cleanDims(meta()[id])}`).join(' + ')}
+  function combinationChoice(set,selected,choose){
+    const reason=unavailableReason(set),button=document.createElement('button');button.type='button';button.className='choice ll-dynamic-choice'+(selected&&!reason?' selected':'');
+    button.disabled=!!reason;button.setAttribute('aria-disabled',String(!!reason));button.setAttribute('aria-pressed',String(selected&&!reason));button.dataset.combinationId=set.id;
+    const title=document.createElement('strong');title.textContent=set.name;
+    const detail=document.createElement('span');detail.textContent=setDetails(set);button.append(title,detail);
+    if(reason){const note=document.createElement('span');note.className='ll-combination-note';note.textContent='Unavailable. '+reason;button.append(note)}
+    button.onclick=choose;return button;
+  }
+  function singleChoice(selected,choose){
+    const button=document.createElement('button');button.type='button';button.className='choice ll-dynamic-choice'+(selected?' selected':'');
+    button.dataset.singleChoice='true';button.setAttribute('aria-pressed',String(selected));
+    button.innerHTML='<strong>Just One Label</strong><span>Choose from your available label sizes</span>';button.onclick=choose;return button;
+  }
+  function focusChoice(container,id){[...document.getElementById(container).querySelectorAll('button')].find(button=>id===null?button.dataset.singleChoice==='true':button.dataset.combinationId===String(id))?.focus()}
+  function setSummary(){
+    const box=document.getElementById('setSummary');if(!box)return;let lines=[],name='';
+    if(chosen.mode==='single'){const id=document.getElementById('singleSize')?.value;if(meta()[id]){lines=[sizeString(id)];name='1 label'}}
+    else{const set=selectableSets().find(s=>s.id===chosen.id)||selectableSets()[0];if(set){chosen.id=set.id;lines=setItems(set).map(([id,q])=>`${q} ${Number(q)===1?'copy':'copies'} · ${sizeString(id)}`);name=set.name}}
+    box.innerHTML='';const title=document.createElement('strong');title.textContent=name||'Choose an available combination or Just One Label';box.append(title);
+    lines.forEach(line=>{box.append(document.createElement('br'),document.createTextNode(line.replace(' · ',' — ')))});
+    if(!enabledIds().length){const note=document.createElement('p');note.textContent='Turn on at least one size in Settings → Available label sizes.';box.append(note)}
+  }
+
+  function renderCreateChoices(){
+    const sec=document.getElementById('sets');if(!sec)return;sec.querySelectorAll(':scope .choice[data-set]').forEach(x=>x.style.display='none');
+    let wrap=document.getElementById('llDynamicSets');const singleWrap=document.getElementById('singleSizeWrap');
+    if(!wrap){wrap=document.createElement('div');wrap.id='llDynamicSets';singleWrap?.before(wrap)}wrap.innerHTML='';
+    const sets=selectableSets();if(chosen.mode==='set'&&!sets.some(s=>s.id===chosen.id))chosen.id=sets[0]?.id||null;
+    allSets().forEach(set=>wrap.append(combinationChoice(set,chosen.mode==='set'&&chosen.id===set.id,()=>{chosen={mode:'set',id:set.id};renderCreateChoices();setSummary();focusChoice('llDynamicSets',set.id)})));
+    wrap.append(singleChoice(chosen.mode==='single',()=>{chosen={mode:'single',id:null};renderCreateChoices();setSummary();focusChoice('llDynamicSets',null)}));
+    if(singleWrap){singleWrap.classList.toggle('hidden',chosen.mode!=='single');const sel=document.getElementById('singleSize');
+      if(sel){const old=sel.value;sel.innerHTML='';enabledIds().forEach(id=>{const option=document.createElement('option');option.value=id;option.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;sel.append(option)});if(enabledIds().includes(old))sel.value=old;sel.onchange=setSummary}}
+    const p=sec.querySelector('.card>p.muted');if(p)p.textContent='Choose a saved size-and-copy combination, or make just one label. Unavailable combinations stay here so you can see which sizes to turn on.';setSummary();
+  }
 
   async function saveCurrent(sizes) {
     const btn=document.getElementById('addToQueue'),status=document.getElementById('singleSaveStatus');
@@ -61,15 +104,35 @@
       if(status&&nav===workflowNavigationVersion)status.textContent='Saving could not finish. Your wording is still here. Check My Labels and Ready to Print before retrying. '+error.message;
     } finally { btn.disabled=false;btn.textContent=old; }
   }
-  function selectedCreateSizes(){if(chosen.mode==='single'){const id=document.getElementById('singleSize')?.value;return id?[sizeString(id)]:[]}const set=eligibleSets().find(s=>s.id===chosen.id)||eligibleSets()[0];return sizesFromSet(set)}
+  function selectedCreateSizes(){if(chosen.mode==='single'){const id=document.getElementById('singleSize')?.value;return id?[sizeString(id)]:[]}const set=selectableSets().find(s=>s.id===chosen.id)||selectableSets()[0];return sizesFromSet(set)}
 
-  function populateBatch(){const sel=document.getElementById('batchSetSelect');if(!sel)return;const old=sel.value;sel.innerHTML='';eligibleSets().forEach(set=>{const o=document.createElement('option');o.value='set:'+set.id;o.textContent=`${set.name} · ${(set.items||[]).map(([id,q])=>`${q} ${meta()[id]?.name}`).join(' + ')}`;sel.append(o)});enabledIds().forEach(id=>{const o=document.createElement('option');o.value='single:'+id;o.textContent=`Single · ${meta()[id].name}`;sel.append(o)});if([...sel.options].some(o=>o.value===old))sel.value=old}
-  try{sizesForBatchSet=function(){const v=document.getElementById('batchSetSelect')?.value||'';if(v.startsWith('single:'))return [sizeString(v.slice(7))];if(v.startsWith('set:'))return sizesFromSet(eligibleSets().find(s=>s.id===v.slice(4)));return sizesFromSet(eligibleSets()[0])}}catch{}
+  function populateBatch(){
+    const select=document.getElementById('batchSetSelect');if(!select)return;const old=select.value;select.innerHTML='';
+    const unavailable=[];
+    allSets().forEach(set=>{const reason=unavailableReason(set),option=document.createElement('option');option.value='set:'+set.id;option.disabled=!!reason;option.textContent=`${set.name} · ${setDetails(set)}${reason?' · Unavailable':''}`;select.append(option);if(reason)unavailable.push(`${set.name}: ${reason}`)});
+    enabledIds().forEach(id=>{const option=document.createElement('option');option.value='single:'+id;option.textContent=`Single · ${meta()[id].name} · ${cleanDims(meta()[id])}`;select.append(option)});
+    const previous=[...select.options].find(option=>option.value===old&&!option.disabled),fallback=[...select.options].find(option=>!option.disabled);select.value=(previous||fallback)?.value||'';
+    let note=document.getElementById('llBatchAvailability');if(!note){note=document.createElement('p');note.id='llBatchAvailability';note.className='ll-combination-note';select.after(note)}
+    note.textContent=unavailable.join(' ');note.hidden=!unavailable.length;
+  }
+
+  try{sizesForBatchSet=function(){const v=document.getElementById('batchSetSelect')?.value||'';if(v.startsWith('single:'))return [sizeString(v.slice(7))];if(v.startsWith('set:'))return sizesFromSet(selectableSets().find(s=>s.id===v.slice(4)));return sizesFromSet(selectableSets()[0])}}catch{}
 
   let reprintChoice={mode:'set',id:null};
-  function renderReprint(){const root=document.getElementById('reprint');if(!root)return;root.querySelectorAll('.reprint-choice').forEach(x=>x.style.display='none');let wrap=document.getElementById('llReprintSets'),single=document.getElementById('reprintSingleWrap');if(!wrap){wrap=document.createElement('div');wrap.id='llReprintSets';single?.before(wrap)}wrap.innerHTML='';const sets=eligibleSets();if(reprintChoice.mode==='set'&&!sets.some(s=>s.id===reprintChoice.id))reprintChoice.id=sets[0]?.id||null;sets.forEach(set=>{const d=document.createElement('div');d.className='choice'+(reprintChoice.mode==='set'&&reprintChoice.id===set.id?' selected':'');d.innerHTML=`<strong>${set.name}</strong><span>${(set.items||[]).map(([id,q])=>`${q} × ${meta()[id]?.name}`).join(' + ')}</span>`;d.onclick=()=>{reprintChoice={mode:'set',id:set.id};renderReprint()};wrap.append(d)});const d=document.createElement('div');d.className='choice'+(reprintChoice.mode==='single'?' selected':'');d.innerHTML='<strong>Just One Label</strong><span>Choose the size below</span>';d.onclick=()=>{reprintChoice={mode:'single',id:null};renderReprint()};wrap.append(d);if(single){single.classList.toggle('hidden',reprintChoice.mode!=='single');const sel=document.getElementById('reprintSingleSize');if(sel){const old=sel.value;sel.innerHTML='';enabledIds().forEach(id=>{const o=document.createElement('option');o.value=id;o.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;sel.append(o)});if(enabledIds().includes(old))sel.value=old}}}
-  async function saveReprint(){if(!selectedLibraryLabel)return;const sizes=reprintChoice.mode==='single'?[sizeString(document.getElementById('reprintSingleSize')?.value)]:sizesFromSet(eligibleSets().find(s=>s.id===reprintChoice.id)||eligibleSets()[0]);const btn=document.getElementById('reprintQueueBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Adding…';try{if(cloudReady){await restFetch('print_queue',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(sizes.map(size=>({label_id:selectedLibraryLabel.id,english:selectedLibraryLabel.english,spanish:selectedLibraryLabel.spanish,photo_data:selectedLibraryLabel.photo||'',size})))});await loadCloudData()}else{sizes.forEach(size=>queue.push({id:crypto.randomUUID(),label_id:selectedLibraryLabel.id,english:selectedLibraryLabel.english,spanish:selectedLibraryLabel.spanish,photo:selectedLibraryLabel.photo||'',size}));refreshQueue()}show('queue')}catch(err){console.error(err);alert("I couldn't add that saved label to Ready to Print.")}finally{btn.disabled=false;btn.textContent=old}}
+  function renderReprint(){
+    const root=document.getElementById('reprint');if(!root)return;root.querySelectorAll('.reprint-choice').forEach(x=>x.style.display='none');
+    let wrap=document.getElementById('llReprintSets');const single=document.getElementById('reprintSingleWrap');
+    if(!wrap){wrap=document.createElement('div');wrap.id='llReprintSets';single?.before(wrap)}wrap.innerHTML='';
+    const sets=selectableSets();if(reprintChoice.mode==='set'&&!sets.some(s=>s.id===reprintChoice.id))reprintChoice.id=sets[0]?.id||null;
+    allSets().forEach(set=>wrap.append(combinationChoice(set,reprintChoice.mode==='set'&&reprintChoice.id===set.id,()=>{reprintChoice={mode:'set',id:set.id};renderReprint();focusChoice('llReprintSets',set.id)})));
+    wrap.append(singleChoice(reprintChoice.mode==='single',()=>{reprintChoice={mode:'single',id:null};renderReprint();focusChoice('llReprintSets',null)}));
+    if(single){single.classList.toggle('hidden',reprintChoice.mode!=='single');const select=document.getElementById('reprintSingleSize');
+      if(select){const old=select.value;select.innerHTML='';enabledIds().forEach(id=>{const option=document.createElement('option');option.value=id;option.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;select.append(option)});if(enabledIds().includes(old))select.value=old}}
+  }
 
-  function install(){const choose=document.getElementById('chooseSetBtn');choose?.addEventListener('click',()=>setTimeout(renderCreateChoices,0));document.getElementById('addToQueue')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const sizes=selectedCreateSizes();if(!sizes.length)return alert('Choose a label set first.');saveCurrent(sizes)},{capture:true});document.getElementById('reprintQueueBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();saveReprint()},{capture:true});const obs=new MutationObserver(()=>{if(!document.getElementById('batchReview')?.classList.contains('hidden'))populateBatch();if(!document.getElementById('reprint')?.classList.contains('hidden'))renderReprint()});['batchReview','reprint'].forEach(id=>{const el=document.getElementById(id);if(el)obs.observe(el,{attributes:true,attributeFilter:['class']})});addEventListener('little-label-settings-changed',()=>{renderCreateChoices();populateBatch();renderReprint()});renderCreateChoices();populateBatch()}
+  async function saveReprint(){if(!selectedLibraryLabel)return;const sizes=reprintChoice.mode==='single'?[sizeString(document.getElementById('reprintSingleSize')?.value)]:sizesFromSet(selectableSets().find(s=>s.id===reprintChoice.id)||selectableSets()[0]);if(!sizes.length||!enabledIds().length)return alert('Choose an available combination or turn on a size in Settings first.');const btn=document.getElementById('reprintQueueBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Adding…';try{if(cloudReady){await restFetch('print_queue',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(sizes.map(size=>({label_id:selectedLibraryLabel.id,english:selectedLibraryLabel.english,spanish:selectedLibraryLabel.spanish,photo_data:selectedLibraryLabel.photo||'',size})))});await loadCloudData()}else{sizes.forEach(size=>queue.push({id:crypto.randomUUID(),label_id:selectedLibraryLabel.id,english:selectedLibraryLabel.english,spanish:selectedLibraryLabel.spanish,photo:selectedLibraryLabel.photo||'',size}));refreshQueue()}show('queue')}catch(err){console.error(err);alert("I couldn't add that saved label to Ready to Print.")}finally{btn.disabled=false;btn.textContent=old}}
+
+
+  function install(){const choiceStyles=document.createElement('style');choiceStyles.textContent='.ll-dynamic-choice{text-align:left;font:inherit;white-space:normal;overflow-wrap:anywhere}.ll-dynamic-choice:disabled{opacity:1;cursor:not-allowed;border-style:dashed!important;background:#F7F5F0!important;color:#61758A!important}.ll-combination-note{display:block;font-size:.82rem;line-height:1.45;color:#735B25;margin-top:8px}.ll-dynamic-choice:focus-visible{outline:3px solid #305F85;outline-offset:2px}';document.head.append(choiceStyles);const choose=document.getElementById('chooseSetBtn');choose?.addEventListener('click',()=>setTimeout(renderCreateChoices,0));document.getElementById('addToQueue')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();const sizes=selectedCreateSizes();if(!sizes.length)return alert('Choose a label set first.');saveCurrent(sizes)},{capture:true});document.getElementById('reprintQueueBtn')?.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();saveReprint()},{capture:true});const obs=new MutationObserver(()=>{if(!document.getElementById('batchReview')?.classList.contains('hidden'))populateBatch();if(!document.getElementById('reprint')?.classList.contains('hidden'))renderReprint()});['batchReview','reprint'].forEach(id=>{const el=document.getElementById(id);if(el)obs.observe(el,{attributes:true,attributeFilter:['class']})});addEventListener('little-label-settings-changed',()=>{renderCreateChoices();populateBatch();renderReprint()});renderCreateChoices();populateBatch()}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })();
