@@ -5,13 +5,13 @@ const path = require('node:path');
 const {stripTypeScriptTypes} = require('node:module');
 const root=path.resolve(__dirname,'..');
 const slugs=['identify-material','translate-label','batch-labels','batch-wording','label-picture'];
-const strip=s=>stripTypeScriptTypes(s.replace(/^import[^;]+;\s*/gm,'').replaceAll('export async function','async function'));
+const strip=s=>stripTypeScriptTypes(s.replace(/^import[^;]+;\s*/gm,'').replace(/\bexport\s+(?=(?:async\s+)?(?:function|class|const))/g,''));
 const shared=strip(fs.readFileSync(path.join(root,'supabase/functions/_shared/access.ts'),'utf8'));
 const json=(x,status=200)=>new Response(JSON.stringify(x),{status,headers:{'Content-Type':'application/json'}});
 let total=0;
 async function run(slug,scenario,mode="list_wording"){
   let handler;const calls=[];
-  const ctx={Request,Response,AbortSignal,URL,Uint8Array,btoa,console,Deno:{env:{get:k=>({SUPABASE_URL:'https://supabase.test',SUPABASE_ANON_KEY:'public-test-key',OPENAI_API_KEY:'mock-only-key'}[k])},serve:fn=>handler=fn},fetch:async(url,options)=>{
+  const ctx={Request,Response,AbortSignal,URL,Uint8Array,TextDecoder,TextEncoder,btoa,console,isIP:require('node:net').isIP,setTimeout,clearTimeout,Deno:{env:{get:k=>({SUPABASE_URL:'https://supabase.test',SUPABASE_ANON_KEY:'public-test-key',OPENAI_API_KEY:'mock-only-key'}[k])},serve:fn=>handler=fn},fetch:async(url,options)=>{
     calls.push(String(url));
     if(String(url).endsWith('/auth/v1/user')){
       assert.equal(options.headers.Authorization,'Bearer test-user-token');
@@ -31,18 +31,18 @@ async function run(slug,scenario,mode="list_wording"){
     if(String(url).startsWith('https://api.openai.com/')){
       assert.equal(scenario,'valid');
       if(slug==='label-picture'||slug==='batch-labels'&&mode==='image')return json({data:[{b64_json:'c3ludGhldGlj'}]});
-      if(slug==='batch-labels'&&mode==='url')return json({output:[{content:[{type:'output_text',text:JSON.stringify({english:'Blocks',spanish:'Bloques'})}]}]});
+      if(slug==='batch-labels'&&mode==='url')return json({output:[{content:[{type:'output_text',text:JSON.stringify({english:'Blocks',translation:'Bloques'})}]}]});
       if(slug==='translate-label')return json({output:[{content:[{type:'output_text',text:'Bloques'}]}]});
       const output=slug==='identify-material'?{english:'Blocks',translation:'Bloques',category:'Toy',confidence:'high',notes:''}:{items:[{english:'Blocks',spanish:'Bloques',translation:'Bloques'}]};
       return json({output:[{content:[{type:'output_text',text:JSON.stringify(output)}]}]});
     }
-    if(url==='https://retailer.test/product')return new Response('<html><title>Synthetic blocks</title></html>');
+    if(url==='https://retailer.example.com/product')return new Response('<html><title>Synthetic blocks</title></html>');
     throw new Error('Unmocked external request denied: '+url);
   }};
-  vm.createContext(ctx);vm.runInContext(shared+'\n'+strip(fs.readFileSync(path.join(root,'supabase/functions',slug,'index.ts'),'utf8')),ctx);
+  vm.createContext(ctx);if(slug==='batch-labels'){vm.runInContext(strip(fs.readFileSync(path.join(root,'supabase/functions/batch-labels/product-network.ts'),'utf8')),ctx);ctx.fetchProductContent=async(url)=>{calls.push(url);assert.equal(scenario,'valid');return {url,bytes:new TextEncoder().encode('<html><title>Synthetic blocks</title></html>')}};}vm.runInContext(shared+'\n'+strip(fs.readFileSync(path.join(root,'supabase/functions',slug,'index.ts'),'utf8')),ctx);
   const method=scenario==='preflight'?'OPTIONS':scenario==='wrong-method'?'GET':'POST';
   const headers=scenario==='apikey-only'?{apikey:'public-test-key'}:scenario==='missing'?{}:{Authorization:'Bearer test-user-token','Content-Type':'application/json'};
-  const payload={english:'Blocks',imageDataUrl:'data:image/png;base64,c3ludGhldGlj',mode,url:'https://retailer.test/product',items:['Blocks']};
+  const payload={english:'Blocks',imageDataUrl:'data:image/png;base64,c3ludGhldGlj',mode,url:'https://retailer.example.com/product',items:['Blocks']};
   const req=new Request('https://edge.test/'+slug,{method,headers,...(method==='POST'?{body:scenario==='bad-json-before-auth'?'not-json':JSON.stringify(payload)}:{})});
   if(scenario==='bad-json-before-auth')req.headers.delete('Authorization');
   const response=await handler(req);
