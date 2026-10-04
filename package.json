@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "node tests/workflows-dom.cjs && node tests/size-settings.cjs && node tests/workflow-ui.cjs && node tests/name-only-render.cjs && node tests/print-preservation.cjs && node tests/packing.cjs . && node tests/pdf-rotation.cjs && node tests/name-startup.cjs && node tests/access-state.cjs && npm run test:security",
+    "test": "node tests/account-safe-saves.cjs && node tests/workflows-dom.cjs && node tests/size-settings.cjs && node tests/workflow-ui.cjs && node tests/name-only-render.cjs && node tests/print-preservation.cjs && node tests/packing.cjs . && node tests/pdf-rotation.cjs && node tests/name-startup.cjs && node tests/access-state.cjs && npm run test:security",
     "test:browser": "node tests/workflows.cjs && node tests/activation-browser.cjs && node tests/size-settings-browser.cjs && node tests/name-only-browser.cjs",
     "test:security": "node tests/ai-client.cjs && node tests/edge-access.cjs && node tests/database-access.cjs"
   },
