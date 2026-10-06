@@ -68,6 +68,22 @@ jobs:
         run: node tests/manual-translation-browser.cjs
         env:
           BROWSER_ENGINE: ${{ matrix.browser }}
+      - name: Exercise the isolated private-preview adapter
+        run: |
+          mkdir -p tests/private-preview/dist
+          python3 tests/private-preview/adapter/assemble.py "$PWD" "$GITHUB_SHA"
+          node tests/private-preview/tests/static-isolation.cjs
+          node tests/private-preview/tests/preview-dom.cjs
+          node tests/private-preview/tests/preview-browser.cjs
+        env:
+          BROWSER_ENGINE: ${{ matrix.browser }}
+      - name: Upload private-preview browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-preview-${{ matrix.browser }}
+          path: tests/private-preview/test-results/${{ matrix.browser }}/
+          if-no-files-found: ignore
       - name: Upload manual-first browser evidence
         if: always()
         uses: actions/upload-artifact@v4

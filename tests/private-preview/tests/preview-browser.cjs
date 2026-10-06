@@ -1,0 +1,70 @@
+const playwright=require('playwright'); const engine=process.env.BROWSER_ENGINE || 'chromium';
+const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert/strict');
+const root=path.resolve(__dirname,'../dist'),out=path.resolve(__dirname,'../test-results/'+engine);fs.mkdirSync(out,{recursive:true});
+(async()=>{
+ const server=http.createServer((req,res)=>{try{let file=path.resolve(root,'.'+new URL(req.url,'http://local').pathname);if(!file.startsWith(root+path.sep)&&file!==root)throw Error();if(fs.statSync(file).isDirectory())file=path.join(file,'index.html');res.setHeader('Content-Type',({'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png'})[path.extname(file)]||'text/html');res.end(fs.readFileSync(file));}catch{res.statusCode=404;res.end()}});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const origin='http://127.0.0.1:'+server.address().port;
+ let browser;const results=[];
+ try{
+ browser=await playwright[engine].launch({headless:true,...(engine==='chromium'&&process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
+ for(const width of [390,1280]){
+  const context=await browser.newContext({viewport:{width,height:900},acceptDownloads:true});const page=await context.newPage();page.setDefaultTimeout(15000);
+  const errors=[],requests=[],external=[],dialogs=[],failedResources=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  page.on('response',r=>{if(r.status()>=400)failedResources.push({url:r.url(),status:r.status()})});
+  page.on('request',r=>{requests.push(r.url());if(new URL(r.url()).origin!==origin && !r.url().startsWith('blob:')&&!r.url().startsWith('data:'))external.push(r.url())});
+  page.on('dialog',async d=>{dialogs.push(d.message());await d.dismiss()});
+  await page.addInitScript(()=>{window.__printCalls=0;window.print=()=>{window.__printCalls++}});
+  const shot=async name=>{await page.waitForFunction(()=>[...document.images].filter(x=>x.getAttribute('src')&&x.getClientRects().length).every(x=>x.complete&&x.naturalWidth));return page.screenshot({path:path.join(out,`${width}-${name}.png`),fullPage:true})};
+  try{
+   await page.goto(origin);await page.waitForFunction(()=>window.__previewReady && window.LittleLabelSettings);
+   assert.match(await page.locator('#previewNotice').innerText(),/saved only in this browser/i);
+   assert.equal(await page.locator('#account').isVisible(),false);await shot('home');
+   const image=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=160;c.height=100;const x=c.getContext('2d');x.fillStyle='#f4db90';x.fillRect(0,0,160,100);x.fillStyle='#285c89';x.fillRect(30,20,80,55);return c.toDataURL('image/png').split(',')[1]});
+   await page.locator('#homeGalleryInput').setInputFiles({name:'test-building-blocks.png',mimeType:'image/png',buffer:Buffer.from(image,'base64')});
+   await page.locator('#preview').waitFor({state:'visible'});
+   assert.equal(await page.locator('#englishInput').inputValue(),'');
+   assert.equal(await page.locator('#spanishInput').inputValue(),'');
+   assert.equal(await page.locator('#identifyPhotoBtn').isDisabled(),true);
+   await page.locator('#englishInput').fill('Building Blocks');await page.locator('#spanishInput').fill('Bloques');
+   await page.waitForTimeout(400);
+   assert.equal(await page.locator('#labelEnglish').textContent(),'Building Blocks');assert.equal(await page.locator('#labelSpanish').textContent(),'Bloques');
+   assert.equal(await page.evaluate(()=>activePhotoDataUrl===photoDataUrl && photoDataUrl.startsWith('data:image/')),true);
+   await shot('manual-photo-review');
+   await page.locator('#chooseSetBtn').click();await page.locator('#sets').waitFor({state:'visible'});await shot('sizes-copies');
+   await page.locator('#addToQueue').click();await page.locator('#queue').waitFor({state:'visible'});await page.waitForFunction(()=>queue.length===2&&library.length===1);
+   assert.match(await page.locator('#queueSaveNotice').textContent(),/Saved only in this browser/);
+   let state=await page.evaluate(()=>JSON.parse(localStorage.getItem(LittleLabelsPreview.key)));
+   assert.equal(state.labels[0].english,'Building Blocks');assert.equal(state.labels[0].spanish,'Bloques');assert.equal(state.print_queue.length,2);
+   await page.locator('#queueItems button').filter({hasText:'+ Copy'}).first().click();await page.waitForFunction(()=>queue.length===3);
+   await page.locator('#mockSheets').click();await page.locator('#printPreview').waitFor({state:'visible'});
+   await page.waitForFunction(()=>[...document.querySelectorAll('#sheetPreviewPages img')].length>0&&[...document.querySelectorAll('#sheetPreviewPages img')].every(x=>x.complete&&x.naturalWidth));
+   await shot('print-sheets');
+   const printInfo=await page.evaluate(()=>({pages:printLayoutPages.length,items:printLayoutPages.flat().map(x=>({english:x.english,spanish:x.spanish,w:x._w,h:x._h})),rasters:[...document.querySelectorAll('#sheetPreviewPages img')].map(x=>({width:x.naturalWidth,height:x.naturalHeight}))}));
+   await page.locator('#printNowBtn').click();await page.waitForFunction(()=>!document.getElementById('printNowBtn').disabled);await page.waitForTimeout(300);
+   const printed=await page.evaluate(()=>__printCalls);assert.equal(printed,1,'Native print button executes exactly once');
+   await page.reload();await page.waitForFunction(()=>window.__previewReady&&queue.length===3&&library.length===1);
+   await page.locator('#libraryBtn').click();await page.locator('#library').waitFor({state:'visible'});assert.match(await page.locator('#library').innerText(),/Building Blocks/);await shot('saved-labels');
+   await page.reload();await page.waitForFunction(()=>window.__previewReady);
+   await page.locator('#homeTypeBtn').click();await page.locator('#tlEnglish').fill('Crayons');await page.locator('#tlSecond').fill('Crayones');
+   assert.equal(await page.locator('#tlTranslationTools .ll-ai-translate').isDisabled(),true);
+   await page.locator('#tlNext').click();await page.locator('#chooseSetBtn').click();
+   await page.evaluate(()=>{const original=Storage.prototype.setItem;window.__restoreStorage=()=>{Storage.prototype.setItem=original};Storage.prototype.setItem=function(k,v){if(k===LittleLabelsPreview.key)throw new DOMException('Simulated full storage','QuotaExceededError');return original.call(this,k,v)}});
+   await page.locator('#addToQueue').click();await page.waitForFunction(()=>document.getElementById('singleSaveStatus').textContent.includes('Browser storage is full'));
+   assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem(LittleLabelsPreview.key)).labels.length),1,'Failed storage write does not claim persistence or discard prior labels');
+   await page.evaluate(()=>window.__restoreStorage());await page.locator('#addToQueue').click();await page.locator('#queue').waitFor({state:'visible'});await page.waitForFunction(()=>library.length===2&&queue.length===5);
+   assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem(LittleLabelsPreview.key)).labels.length),2);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,'No horizontal overflow');
+   assert.deepEqual(external,[],'No external network requests');
+   assert.deepEqual(errors,[],'No page exceptions');assert.deepEqual(failedResources,[],'No missing or failed static resources');
+   const audit=await page.evaluate(()=>LittleLabelsPreview.audit);assert.deepEqual(audit.blocked,[],'No app request attempted outside local storage');
+   const transportTest=await page.evaluate(async()=>{try{await fetch('https://example.invalid/forbidden')}catch(e){return e.message}});assert.match(transportTest,/isolated preview/);
+   assert.deepEqual(external,[]);
+   results.push({width,status:'passed',external,errors,dialogs,requests,failedResources,printInfo,printCalls:printed,storageQuotaRetry:true});
+   console.log('PASS '+width+'px photo/manual/size/copy/print/local persistence/reload/quota failure/retry/network isolation');
+  }catch(e){await page.screenshot({path:path.join(out,`${width}-FAILURE.png`),fullPage:true}).catch(()=>{});fs.writeFileSync(path.join(out,`failure-${width}.json`),JSON.stringify({error:e.stack,errors,external,dialogs,requests},null,2));throw e;}
+  finally{await context.close()}
+ }
+ fs.writeFileSync(path.join(out,'browser-results.json'),JSON.stringify(results,null,2));
+ }finally{await browser?.close();await new Promise(r=>server.close(r))}
+})().catch(e=>{console.error(e);process.exitCode=1});
