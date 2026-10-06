@@ -1,5 +1,5 @@
 // Real Chromium/WebKit interactions with local assets and synthetic services only.
-// The print observer records the real PDF Blob while preserving URL creation.
+// The print observer captures the existing native-print handler and decoded rasters.
 // This is frontend evidence, not a deployed billing, database/RLS, or provider test.
 const playwright = require('playwright');
 const assert = require('node:assert/strict');
@@ -77,8 +77,12 @@ fs.mkdirSync(out, { recursive: true });
               return operations.get(p.ownerAccountId + ':' + p.operationId);
             }
           };
-          const createURL = URL.createObjectURL.bind(URL);
-          URL.createObjectURL = blob => { if (blob?.type === 'application/pdf') window.__printPdf = blob; return createURL(blob); };
+          window.__nativePrintCalls = 0;
+          window.__nativePrintRasters = [];
+          window.print = () => {
+            window.__nativePrintCalls++;
+            window.__nativePrintRasters = [...document.querySelectorAll('#printRoot img')].map(image => ({ src: image.src, complete: image.complete, width: image.naturalWidth, height: image.naturalHeight }));
+          };
         });
         await page.route('**/*', async route => {
           const request = route.request(), url = new URL(request.url());
@@ -205,13 +209,16 @@ fs.mkdirSync(out, { recursive: true });
         });
         await noOverflow('#printPreview');
         await screenshot('manual-print-preview');
+        const expectedPrintRasters = await page.locator('#sheetPreviewPages img').evaluateAll(images => images.map(image => image.src));
         await page.locator('#printNowBtn').click();
-        await page.waitForFunction(() => window.__printPdf?.type === 'application/pdf');
-        const pdf = Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await window.__printPdf.arrayBuffer()))));
-        assert.ok(pdf.length > 1000, 'A nonempty PDF was generated');
-        assert.equal(pdf.subarray(0, 8).toString(), '%PDF-1.4');
-        assert.match(pdf.toString('latin1'), /\/MediaBox \[0 0 612 792\]/);
-        fs.writeFileSync(path.join(out, `manual-print-${viewport.width}.pdf`), pdf);
+        await page.waitForFunction(() => window.__nativePrintCalls === 1 && !document.getElementById('printNowBtn').disabled);
+        const printResult = await page.evaluate(() => ({ calls: __nativePrintCalls, rasters: __nativePrintRasters, ariaHidden: document.getElementById('printRoot').getAttribute('aria-hidden') }));
+        assert.equal(printResult.calls, 1, 'The real button invokes native print exactly once');
+        assert.equal(printResult.ariaHidden, null);
+        assert.ok(printResult.rasters.length > 0);
+        assert.ok(printResult.rasters.every(image => image.complete && image.width > 0 && image.height > 0), 'Native print receives decoded rasters');
+        assert.deepEqual(printResult.rasters.map(image => image.src), expectedPrintRasters, 'Native print matches the manual label preview');
+        fs.writeFileSync(path.join(out, `manual-print-${viewport.width}.json`), JSON.stringify(printResult, null, 2));
         assert.deepEqual(await counts(), { quote: 2, execute: 2, status: 1 });
 
         // A delayed A result cannot enter B's draft, balance, labels, or queue.
@@ -259,7 +266,7 @@ fs.mkdirSync(out, { recursive: true });
         assert.deepEqual(errors, [], 'No page JavaScript error');
         assert.deepEqual(dialogs.filter(message => !message.startsWith('Your print-ready PDF was created.')), [], 'No unexpected alert or confirmation');
         fs.writeFileSync(path.join(out, `results-${viewport.width}.json`), JSON.stringify({ engine, viewport, result: 'passed', creditCalls: await page.evaluate(() => __creditCalls), externalAI, blockedExternal, errors, dialogs, requests }, null, 2));
-        console.log(`PASS ${engine} ${viewport.width}px manual edits/save/decoded print/PDF, no auto AI, double-click/manual-edit protection, lost response, zero credits and account isolation/recovery`);
+        console.log(`PASS ${engine} ${viewport.width}px manual edits/save/decoded native print, no auto AI, double-click/manual-edit protection, lost response, zero credits and account isolation/recovery`);
       } catch (error) {
         await screenshot('failure').catch(() => {});
         fs.writeFileSync(path.join(out, `failure-${viewport.width}.json`), JSON.stringify({ engine, viewport, error: error.stack, errors, dialogs, externalAI, blockedExternal, requests }, null, 2));
