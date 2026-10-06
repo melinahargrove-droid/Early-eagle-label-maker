@@ -58,10 +58,10 @@ const session=id=>({access_token:'synthetic-'+id,refresh_token:'synthetic-refres
   {
    const {page,model,close}=await fixture({purchased:true});await expect(page.locator('#llAccessGate')).toBeHidden();
    const choose=page.waitForEvent('filechooser');await page.locator('#homeGalleryBtn').click();await (await choose).setFiles({name:'synthetic.png',mimeType:'image/png',buffer:png});
-   await expect(page.locator('#capture')).toBeVisible();await expect(page.locator('#identifyStatus')).toContainText('limit');await expect(page.locator('#retryIdentify')).toBeVisible();await shot(page,'photo-rate-limit');
-   model.photoStatus=500;await page.locator('#retryIdentify').click();await expect(page.locator('#identifyStatus')).toContainText("Couldn't identify");await shot(page,'photo-service-error');
-   model.holdPhoto=true;await page.locator('#retryIdentify').click();await expect.poll(()=>model.held.length).toBe(1);await page.locator('#captureBack').click();await expect(page.locator('#home')).toBeVisible();await model.held.shift()().catch(()=>{});await page.waitForTimeout(100);await expect(page.locator('#home')).toBeVisible();assert.notEqual(await page.evaluate(()=>identification?.english),'STALE');
-   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await close();console.log('PASS actual Home upload shows 429/service failures, retains retry, cancels stale response after Back, and fits mobile');
+   await expect(page.locator('#preview')).toBeVisible();await expect(page.locator('#identifyPhotoBtn')).toBeDisabled();await expect(page.locator('#photoAIStatus')).toContainText('paid AI access and credits');
+   await page.locator('#englishInput').fill('My manual photo');await page.locator('#spanishInput').fill('Mi foto');await shot(page,'manual-photo-review');
+   await page.locator('#previewBack').click();await page.locator('#editIdentification').click();await expect(page.locator('#englishInput')).toHaveValue('My manual photo');await expect(page.locator('#spanishInput')).toHaveValue('Mi foto');
+   assert.equal(model.calls.filter(c=>c.path.includes('/functions/')).length,0);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await close();console.log('PASS Home upload opens usable manual review, preserves edits on Back, never identifies, and fits mobile');
   }
  }finally{await browser?.close();await new Promise(r=>server.close(r))}
 })().catch(error=>{console.error(error);process.exitCode=1});

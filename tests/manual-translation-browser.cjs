@@ -262,11 +262,69 @@ fs.mkdirSync(out, { recursive: true });
         assert.equal(await page.evaluate(() => __balances.A), 4);
         assert.deepEqual(await page.evaluate(() => [library.length, queue.length]), [1, 2]);
         await screenshot('account-recovered');
+        // Photo/Gallery now starts a complete manual image-label flow, even with
+        // no credit bridge. This fixture never contacts a provider or production DB.
+        await page.locator('#tlBack').click();
+        const beforePhotoCredits = await counts();
+        await page.evaluate(() => { window.LittleLabelsCreditTestTransport = null; });
+        const photo = { name: 'synthetic-blocks.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240"><rect width="320" height="240" fill="#fff8e9"/><rect x="40" y="90" width="85" height="85" rx="8" fill="#669abe"/><rect x="145" y="75" width="100" height="100" rx="8" fill="#c88660"/><text x="160" y="215" text-anchor="middle" font-size="18" fill="#17375e">SYNTHETIC PHOTO</text></svg>') };
+        assert.equal(await page.locator('#homeCameraInput').getAttribute('capture'), 'environment');
+        for (const source of ['homeGalleryInput', 'homeCameraInput', 'galleryInput', 'cameraInput']) {
+          if (source.startsWith('home')) {
+            await page.evaluate(() => show('home'));
+            const chooser = page.waitForEvent('filechooser');
+            await page.locator(source === 'homeGalleryInput' ? '#homeGalleryBtn' : '#homePhotoBtn').click();
+            await (await chooser).setFiles(photo);
+          } else {
+            await page.locator('#previewBack').click();
+            await page.locator('#confirmBack').click();
+            await page.locator('#' + source).setInputFiles(photo);
+          }
+          await page.locator('#preview').waitFor({ state: 'visible' });
+          assert.equal(await page.locator('#englishInput').inputValue(), '');
+          assert.equal(await page.locator('#spanishInput').inputValue(), '');
+          assert.equal(await page.locator('#identifyPhotoBtn').isDisabled(), true);
+          assert.match(await page.locator('#photoAIStatus').textContent(), /paid AI access and credits/);
+          await page.locator('#englishInput').fill('Photo blocks');
+          await page.locator('#spanishInput').fill('Bloques de la foto');
+          await page.locator('#previewBack').click();
+          await page.locator('#editIdentification').click();
+          assert.equal(await page.locator('#englishInput').inputValue(), 'Photo blocks');
+          assert.equal(await page.locator('#spanishInput').inputValue(), 'Bloques de la foto');
+          assert.equal(await page.locator('#labelPhoto').evaluate(image => image.complete && image.naturalWidth === 320), true);
+          assert.deepEqual(await counts(), beforePhotoCredits);
+          assert.deepEqual(externalAI, []);
+        }
+        await noOverflow('#preview');
+        await screenshot('photo-manual-review');
+        // A cancelled picker and an invalid replacement cannot erase teacher edits.
+        await page.evaluate(() => handlePhoto(undefined));
+        await page.locator('#previewBack').click();await page.locator('#confirmBack').click();
+        await page.locator('#galleryInput').setInputFiles({ name: 'invalid.png', mimeType: 'image/png', buffer: Buffer.from('synthetic invalid image') });
+        await page.waitForFunction(() => document.getElementById('identifyStatus').textContent.includes("Couldn't read"));
+        await page.locator('#returnToPhotoLabel').click();
+        assert.equal(await page.locator('#englishInput').inputValue(), 'Photo blocks');
+        assert.equal(await page.locator('#spanishInput').inputValue(), 'Bloques de la foto');
+        await page.locator('#chooseSetBtn').click();await page.locator('#addToQueue').click();
+        await page.locator('#queue').waitFor({ state: 'visible' });
+        await page.waitForFunction(() => library.length === 2 && queue.length === 4);
+        const savedPhoto = [...db.get('A').labels.values()].find(row => row.english === 'Photo blocks');
+        assert.ok(savedPhoto?.photo_data.startsWith('data:image/jpeg'));
+        assert.equal(savedPhoto.spanish, 'Bloques de la foto');
+        await page.locator('#mockSheets').click();
+        await page.locator('#printPreview').waitFor({ state: 'visible' });
+        await page.waitForFunction(() => [...document.querySelectorAll('#sheetPreviewPages img')].every(image => image.complete && image.naturalWidth > 0));
+        await noOverflow('#printPreview');await screenshot('photo-manual-print');
+        await page.locator('#printNowBtn').click();
+        await page.waitForFunction(() => __nativePrintCalls === 2 && !document.getElementById('printNowBtn').disabled);
+        assert.equal(await page.evaluate(() => __nativePrintRasters.every(image => image.complete && image.width > 0)), true);
+        assert.deepEqual(await counts(), beforePhotoCredits);
+
         assert.deepEqual(externalAI, [], 'No unmetered AI endpoint was attempted');
         assert.deepEqual(errors, [], 'No page JavaScript error');
         assert.deepEqual(dialogs.filter(message => !message.startsWith('Your print-ready PDF was created.')), [], 'No unexpected alert or confirmation');
         fs.writeFileSync(path.join(out, `results-${viewport.width}.json`), JSON.stringify({ engine, viewport, result: 'passed', creditCalls: await page.evaluate(() => __creditCalls), externalAI, blockedExternal, errors, dialogs, requests }, null, 2));
-        console.log(`PASS ${engine} ${viewport.width}px manual edits/save/decoded native print, no auto AI, double-click/manual-edit protection, lost response, zero credits and account isolation/recovery`);
+        console.log(`PASS ${engine} ${viewport.width}px manual edits/save/decoded native print, manual photo save/print with disabled AI, no auto AI, double-click/manual-edit protection, lost response, zero credits and account isolation/recovery`);
       } catch (error) {
         await screenshot('failure').catch(() => {});
         fs.writeFileSync(path.join(out, `failure-${viewport.width}.json`), JSON.stringify({ engine, viewport, error: error.stack, errors, dialogs, externalAI, blockedExternal, requests }, null, 2));

@@ -267,10 +267,10 @@
 <div class="app">
   <section id="home">
     <p class="muted" style="margin-bottom:5px">Early Eagle Academy</p><h1>Classroom Label Maker</h1>
-    <p class="muted">Take a photo. Let AI identify it. Make matching bilingual labels.</p>
+    <p class="muted">Choose a photo, type your words, and make matching labels.</p>
     <h2 class="home-create-title">What would you like to create?</h2>
     <div class="home-create-grid">
-      <button class="home-action" id="homePhotoBtn"><span class="home-icon">📷</span><strong>Photo</strong><small>Take a photo and let AI identify it.</small></button>
+      <button class="home-action" id="homePhotoBtn"><span class="home-icon">📷</span><strong>Photo</strong><small>Take a photo and type the label yourself.</small></button>
       <input id="homeCameraInput" type="file" accept="image/*" capture="environment" class="hidden">
       <button class="home-action" id="homeGalleryBtn"><span class="home-icon">🖼️</span><strong>Gallery</strong><small>Choose a photo from your gallery.</small></button>
       <input id="homeGalleryInput" type="file" accept="image/*" class="hidden">
@@ -297,17 +297,18 @@
         <label for="galleryInput">Or choose from gallery</label>
         <input id="galleryInput" type="file" accept="image/*">
       </div>
-      <img id="capturedPreview" class="preview-photo hidden" alt="Photo selected for identification">
+      <img id="capturedPreview" class="preview-photo hidden" alt="Selected label photo">
       <div role="status" aria-live="polite" id="identifyStatus" class="status hidden"></div>
-      <button id="retryIdentify" class="secondary hidden">Try Identification Again</button>
+      <button id="returnToPhotoLabel" class="secondary hidden">Keep Editing This Photo Label →</button>
+      <button id="retryIdentify" class="secondary hidden" disabled>Identify with AI</button>
     </div>
   </section>
 
   <section id="confirm" class="hidden">
-    <button class="secondary" id="confirmBack">← Retake Photo</button>
+    <button class="secondary" id="confirmBack">← Choose Another Photo</button>
     <div class="card">
-      <span class="pill">AI identification</span>
-      <h2 style="margin-top:10px">I think these are…</h2>
+      <span class="pill">Photo label</span>
+      <h2 style="margin-top:10px">Your photo and wording</h2>
       <img id="confirmPhoto" class="preview-photo" alt="Material photo">
       <div id="cleanupStatus" class="status hidden" aria-live="polite"></div>
       <div id="cleanupStrengthWrap" class="hidden" style="margin-top:10px">
@@ -340,7 +341,7 @@
     <div class="card">
       <h2>Review Label</h2>
       <p class="tiny">2 · Review wording and picture, then choose sizes</p>
-      <p id="photoModeNote" class="muted">Using cleaned photo on white background.</p>
+      <p id="photoModeNote" class="muted">Using the original photo.</p>
       <div id="labelCard" class="label-preview">
         <div class="label-image-wrap"><img id="labelPhoto" alt=""></div>
         <div class="label-text">
@@ -354,6 +355,11 @@
       <label for="spanishInput">Spanish</label>
       <input id="spanishInput" autocomplete="off">
       <div id="translationStatus" class="tiny" style="margin-top:6px"></div>
+      <div id="photoIdentificationTools" class="hidden">
+        <p class="tiny">Type your label below. Choosing a photo and writing your own words uses no AI credits.</p>
+        <button id="identifyPhotoBtn" class="secondary" disabled aria-describedby="photoAIStatus">Identify with AI</button>
+        <p id="photoAIStatus" class="tiny" role="status">AI identification is unavailable until paid AI access and credits can be verified. You can still type, save, and print this photo label.</p>
+      </div>
 
       <button id="chooseSetBtn" class="primary" style="margin-top:14px">Review Sizes & Copies →</button>
     </div>
@@ -1327,7 +1333,7 @@ function setStatus(text, cls){
 let photoWork=null,photoWorkRevision=0;
 function cancelPhotoWork(){
   photoWorkRevision++;photoWork?.controller.abort();photoWork=null;
-  if($('retryIdentify')){$('retryIdentify').disabled=false;$('retryIdentify').textContent='Try Again';}
+  if($('retryIdentify')){$('retryIdentify').disabled=true;$('retryIdentify').textContent='Identify with AI';}
 }
 function newPhotoWork(){
   cancelPhotoWork();const work={revision:photoWorkRevision,nav:workflowNavigationVersion,context:singleDraftContext,controller:new AbortController()};photoWork=work;return work;
@@ -1337,14 +1343,31 @@ function assertPhotoWork(work){
   assertSingleDraft(work.context);
 }
 async function handlePhoto(file){
+  // A dismissed file picker leaves the current draft untouched.
   if(!file)return;
-  show('capture');beginSingleDraft();currentCreationSource='photo';
-  const work=newPhotoWork();photoDataUrl='';$('capturedPreview').classList.add('hidden');
-  $('retryIdentify').classList.add('hidden');setStatus('Preparing photo…','loading');
+  show('capture');
+  // Keep the prior label until the replacement decodes successfully.
+  if(!singleDraftContext)beginSingleDraft();
+  const work=newPhotoWork();
+  $('returnToPhotoLabel').classList.toggle('hidden',currentCreationSource!=='photo'||!photoDataUrl);
+  $('retryIdentify').classList.add('hidden');
+  setStatus('Preparing photo…','loading');
   try{
-    const prepared=await compressImage(file);assertPhotoWork(work);photoDataUrl=prepared;
+    const prepared=await compressImage(file);assertPhotoWork(work);
+    beginSingleDraft();currentCreationSource='photo';
+    photoDataUrl=prepared;activePhotoDataUrl=prepared;cleanedPhotoDataUrl='';rawRemovedPhotoDataUrl='';
+    cleanupSucceeded=false;cleanupMode='normal';
+    clearTimeout(translationTimer);translationRequestId++;lastAutoTranslatedEnglish='';
+    $('englishInput').value='';$('spanishInput').value='';$('translationStatus').textContent='';
+    for(const id of ['cleanupStatus','cleanupStrengthWrap','photoChoiceRow','retryCleanupBtn','retryIdentify'])$(id).classList.add('hidden');
+    for(const id of ['homeCameraInput','homeGalleryInput','cameraInput','galleryInput'])$(id).value='';
+    $('returnToPhotoLabel').classList.remove('hidden');
+    identification={english:'',spanish:'',category:'',confidence:'',notes:''};
     $('capturedPreview').src=prepared;$('capturedPreview').classList.remove('hidden');
-    await identify(work);
+    populateConfirm();syncLabel();
+    // Image preparation is local. No identification, translation, or cleanup is started.
+    setStatus('Photo ready. Type your label wording.','ok');
+    photoWork=null;show('preview');$('englishInput').focus();
   }catch(error){
     if(photoWork!==work||error.code==='SESSION_CHANGED'||error.code==='STALE_PHOTO')return;
     setStatus("Couldn't read that photo. Choose a different picture and try again.",'error');
@@ -1540,38 +1563,21 @@ async function cleanBackground(){
     return false;
   }
 }
-async function identify(existingWork=null){
-  if(!photoDataUrl||(!existingWork&&photoWork))return;
-  const work=existingWork||newPhotoWork();
-  setStatus('Identifying the classroom material…','loading');$('retryIdentify').classList.add('hidden');$('retryIdentify').disabled=true;
-  const timeout=setTimeout(()=>work.controller.abort(),30000);
-  try{
-    assertPhotoWork(work);
-    const response=await littleLabelsAIFetch(FUNCTION_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageDataUrl:photoDataUrl}),signal:work.controller.signal});
-    let data;try{data=await response.json()}catch{data={};}assertPhotoWork(work);
-    if(!response.ok||!data.success||!data.identification){const error=Error('Identification unavailable');error.status=response.status;throw error;}
-    identification=data.identification;activePhotoDataUrl=photoDataUrl;setStatus('Identified!','ok');populateConfirm();
-    photoWork=null;show('confirm');await cleanBackground();
-  }catch(error){
-    if(photoWork!==work||error.code==='SESSION_CHANGED'||error.code==='STALE_PHOTO')return;
-    try{assertPhotoWork(work)}catch{return;}
-    const message=error.status===429?'The photo identification limit has been reached. Try again later, or use Type a Label to keep working.':
-      /sign-in expired|permanent account/i.test(error.message)?'Your sign-in expired. Open Account and sign in again before trying this photo.':
-      error.name==='AbortError'?'Photo identification took too long. Check your connection and try again.':
-      "Couldn't identify this photo. Check your connection, try again, or choose another picture.";
-    setStatus(message,'error');$('retryIdentify').classList.remove('hidden');
-  }finally{clearTimeout(timeout);if(photoWork===work){photoWork=null;$('retryIdentify').disabled=false;}}
+async function identify(){
+  // Base-app activation and a daily rate quota are not paid AI entitlement.
+  // Fail closed until a server-verified credit operation is available. Do not
+  // restore the legacy unmetered endpoint as a fallback, even on an explicit click.
+  $('photoAIStatus').textContent='AI identification is unavailable until paid AI access and credits can be verified. You can still type, save, and print this photo label.';
+  return false;
 }
 
 function populateConfirm(){
   $("confirmPhoto").src=activePhotoDataUrl || photoDataUrl;
-  $("foundEnglish").textContent=identification.english || "";
-  $("foundSpanish").textContent=identification.spanish || "";
-  $("foundCategory").textContent=identification.category ? "Category: "+identification.category : "";
-  $("foundConfidence").textContent=identification.confidence ? "Confidence: "+identification.confidence : "";
-  $("foundNotes").textContent=identification.notes || "";
-  $("englishInput").value=identification.english || "";
-  $("spanishInput").value=identification.spanish || "";
+  $("foundEnglish").textContent=$("englishInput").value || "Type the label yourself";
+  $("foundSpanish").textContent=$("spanishInput").value || "";
+  $("foundCategory").textContent="";
+  $("foundConfidence").textContent="";
+  $("foundNotes").textContent="Your photo is ready to use. Type your own label wording; no AI is needed.";
   lastAutoTranslatedEnglish=$("englishInput").value.trim();
   $("translationStatus").textContent="";
   syncLabel();
@@ -1584,6 +1590,7 @@ function scheduleAutoTranslation(){
 }
 
 function syncLabel(){
+  $('photoIdentificationTools').classList.toggle('hidden',currentCreationSource!=='photo');
   $("labelEnglish").textContent=$("englishInput").value || "Material";
   $("labelSpanish").textContent=$("spanishInput").value || "material";
   $("labelPhoto").src=activePhotoDataUrl || photoDataUrl;
@@ -2892,7 +2899,7 @@ $("captureBack").addEventListener("click",()=>show("home"));
 $("confirmBack").addEventListener("click",()=>show("capture"));
 $("previewBack").addEventListener("click",()=>{
   if(currentCreationSource==='typed') window.LittleLabelsTypedLabel?.returnToInput();
-  else show("confirm");
+  else {populateConfirm();show("confirm");}
 });
 $("setsBack").addEventListener("click",()=>show("preview"));
 $("queueBack").addEventListener("click",()=>show("home"));
@@ -2911,6 +2918,8 @@ $("galleryInput").addEventListener("change",e=>handlePhoto(e.target.files?.[0]))
 $('homeGalleryInput').addEventListener('change',e=>handlePhoto(e.target.files?.[0]));
 $('homeCameraInput').addEventListener('change',e=>handlePhoto(e.target.files?.[0]));
 $('retryIdentify').addEventListener('click',()=>identify());
+$('identifyPhotoBtn').addEventListener('click',()=>identify());
+$('returnToPhotoLabel').addEventListener('click',()=>{if(currentCreationSource==='photo'&&photoDataUrl){syncLabel();show('preview');}});
 $("thatsRight").addEventListener("click",()=>{populateConfirm();show("preview")});
 $("editIdentification").addEventListener("click",()=>{populateConfirm();show("preview");$("englishInput").focus()});
 $("englishInput").addEventListener("input",()=>{

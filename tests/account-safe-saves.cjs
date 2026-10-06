@@ -234,9 +234,9 @@ async function run(name,fn){const f=await fixture();try{await fn(f);await tick()
     w.setAccount('B');raster.resolve('data:image/png;base64,U1lOVEhFVElD');await pending;
     assert.equal($('printRoot').textContent,'');assert.equal($('printRoot').querySelectorAll('img').length,0);assert.equal($('sheetPreviewPages').textContent,'');assert.equal(w.eval('printBatchIds.length+printLayoutPages.length'),0);
   });
-  await run('real photo-identification and save handler retries a lost queue response',async({w,db,click})=>{
-    w.compressImage=async()=> 'synthetic-photo-A';w.littleLabelsAIFetch=async()=>response({success:true,identification:{english:'Photo label',spanish:'Photo second'}});
-    await w.handlePhoto({name:'synthetic.png'});click('thatsRight');click('chooseSetBtn');await tick();db.fail={table:'print_queue',when:'after'};click('addToQueue');await tick();click('addToQueue');await tick();
+  await run('manual photo and save handler retries a lost queue response without AI',async({w,db,click,input})=>{
+    w.compressImage=async()=> 'synthetic-photo-A';w.littleLabelsAIFetch=async()=>{throw Error('Photo must not call AI')};
+    await w.handlePhoto({name:'synthetic.png'});input('englishInput','Photo label');input('spanishInput','Photo second');click('chooseSetBtn');await tick();db.fail={table:'print_queue',when:'after'};click('addToQueue');await tick();click('addToQueue');await tick();
     assert.equal(db.labels.size,1);assert.equal(db.print_queue.size,2);assert.equal([...db.labels.values()][0].photo_data,'synthetic-photo-A');
   });
   await run('account replacement clears synthetic password and verification form values',async({w,$})=>{

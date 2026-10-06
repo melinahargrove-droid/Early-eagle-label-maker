@@ -63,15 +63,30 @@ const recovery='#type=recovery&access_token=synthetic-A&refresh_token=synthetic-
  for(const status of [401,429,500])await run('recovery save '+status+' is safe and retryable only with a valid session',async f=>{
   f.setHook(r=>r.url.includes('/auth/v1/user')&&r.method==='PUT'?response({msg:'PRIVATE DETAIL'},status):undefined);f.input('recoveryPassword','synthetic-password');f.input('recoveryPassword2','synthetic-password');f.click('saveRecoveryPasswordBtn');await tick();assert.doesNotMatch(f.$('recoveryStatus').textContent,/PRIVATE/);assert.equal(f.$('saveRecoveryPasswordBtn').disabled,status===401);
  },{fragment:recovery});
- for(const status of [429,500])await run('Home photo '+status+' remains visible with retained image and working retry',async f=>{
-  let requests=0;f.setHook(r=>r.url.includes('/identify-material')?(requests++,response({error:'PRIVATE ERROR'},status)):undefined);
-  const file=new f.w.File(['synthetic'],'photo.png',{type:'image/png'});Object.defineProperty(f.$('homeGalleryInput'),'files',{value:[file]});f.$('homeGalleryInput').dispatchEvent(new f.w.Event('change'));await tick();await tick();
-  assert.equal(f.$('capture').classList.contains('hidden'),false);assert.equal(f.$('identifyStatus').classList.contains('hidden'),false);assert.equal(f.$('retryIdentify').classList.contains('hidden'),false);assert.doesNotMatch(f.$('identifyStatus').textContent,/PRIVATE/);assert.match(f.$('identifyStatus').textContent,status===429?/limit/:/try again/);f.click('retryIdentify');await tick();assert.equal(requests,2);
+ for(const inputId of ['homeGalleryInput','homeCameraInput','galleryInput','cameraInput'])await run(inputId+' opens manual review with zero AI calls',async f=>{
+  const file=new f.w.File(['synthetic'],'photo.png',{type:'image/png'});Object.defineProperty(f.$(inputId),'files',{value:[file]});f.$(inputId).dispatchEvent(new f.w.Event('change'));await tick();await tick();
+  assert.equal(f.$('preview').classList.contains('hidden'),false);assert.equal(f.$('englishInput').value,'');assert.equal(f.$('spanishInput').value,'');assert.ok(f.$('labelPhoto').src.startsWith('data:image/'));
+  assert.equal(f.$('identifyPhotoBtn').disabled,true);assert.match(f.$('photoAIStatus').textContent,/paid AI access and credits/);
+  assert.equal(f.calls.filter(r=>r.url.includes('/functions/')).length,0);
+  f.input('englishInput','Manual blocks');f.input('spanishInput','Teacher wording');f.click('previewBack');f.click('editIdentification');
+  assert.equal(f.$('englishInput').value,'Manual blocks');assert.equal(f.$('spanishInput').value,'Teacher wording');await f.w.identify();f.click('identifyPhotoBtn');
+  assert.equal(f.calls.filter(r=>r.url.includes('/functions/')).length,0);
  });
- for(const action of ['navigate','account','newer'])await run('delayed photo response is cancelled by '+action,async f=>{
-  const delay=deferred();f.setHook(r=>r.url.includes('/identify-material')?delay.promise:undefined);const pending=f.w.handlePhoto(new f.w.File(['synthetic'],'photo.png'));await tick();
-  if(action==='navigate')f.w.show('home');else if(action==='account')f.switchAccount('B');else {f.w.compressImage=async()=>{throw Error('Synthetic unreadable replacement')};await f.w.handlePhoto(new f.w.File(['new'],'new.png'));}
-  delay.resolve(response({success:true,identification:{english:'STALE RESULT',spanish:'STALE'}}));await pending;assert.notEqual(f.w.eval('identification?.english'),'STALE RESULT');assert.equal(f.$('confirm').classList.contains('hidden'),true);
+ for(const action of ['navigate','account','newer','cancel-to-manual'])await run('delayed local photo preparation is cancelled by '+action,async f=>{
+  f.w.compressImage=async()=> 'data:image/jpeg;base64,ORIGINAL';await f.w.handlePhoto({name:'original.png'});f.input('englishInput','Keep my wording');
+  const delay=deferred();f.w.compressImage=()=>delay.promise;const pending=f.w.handlePhoto({name:'delayed.png'});await tick();
+  if(action==='navigate')f.w.show('home');else if(action==='account')f.switchAccount('B');else if(action==='cancel-to-manual')f.click('returnToPhotoLabel');else {f.w.compressImage=async()=> 'data:image/jpeg;base64,NEWEST';await f.w.handlePhoto({name:'new.png'});f.input('englishInput','Newest teacher edit');}
+  delay.resolve('data:image/jpeg;base64,STALE');await pending;
+  assert.notEqual(f.w.eval('photoDataUrl'),'data:image/jpeg;base64,STALE');
+  if(action==='newer')assert.equal(f.$('englishInput').value,'Newest teacher edit');
+  if(action==='cancel-to-manual')assert.equal(f.$('englishInput').value,'Keep my wording');
+  assert.equal(f.calls.filter(r=>r.url.includes('/functions/')).length,0);
+ });
+ await run('cancelled picker and unreadable replacement preserve a usable manual label',async f=>{
+  f.w.compressImage=async()=> 'data:image/jpeg;base64,ORIGINAL';await f.w.handlePhoto({name:'original.png'});f.input('englishInput','My photo label');f.input('spanishInput','Mi etiqueta');
+  await f.w.handlePhoto(undefined);assert.equal(f.$('englishInput').value,'My photo label');assert.equal(f.$('preview').classList.contains('hidden'),false);
+  f.w.compressImage=async()=>{throw Error('Synthetic bad photo')};await f.w.handlePhoto({name:'bad.png'});assert.match(f.$('identifyStatus').textContent,/read that photo/);f.click('returnToPhotoLabel');
+  assert.equal(f.$('preview').classList.contains('hidden'),false);assert.equal(f.$('englishInput').value,'My photo label');assert.equal(f.$('spanishInput').value,'Mi etiqueta');assert.equal(f.w.eval('photoDataUrl'),'data:image/jpeg;base64,ORIGINAL');
  });
  await run('activation dialog traps Tab/Escape, makes background inert, and restores focus',async f=>{
   assert.equal(f.$('llAccessGate').getAttribute('role'),'dialog');assert.equal(f.w.document.querySelector('.app').inert,true);f.$('llaCode').focus();f.w.document.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));assert.equal(f.w.document.activeElement,f.$('llaManageAccount'));
@@ -106,9 +121,10 @@ const recovery='#type=recovery&access_token=synthetic-A&refresh_token=synthetic-
  await run('password email timeout leaves safe retry and clears its busy guard',async f=>{
   f.w.show('account');f.click('forgotPasswordBtn');f.input('passwordRequestEmail','synthetic@example.invalid');f.setHook(r=>r.url.includes('/recover')?untilAbort(r):undefined);f.click('requestPasswordBtn');await tick();f.fireTimeouts();await tick();assert.match(f.$('passwordRequestStatus').textContent,/try again/);assert.equal(f.$('requestPasswordBtn').disabled,false);assert.equal(f.w.eval('passwordRequest'),null);
  },{captureTimeouts:true});
- await run('photo timeout keeps its visible retry and never navigates',async f=>{
-  f.setHook(r=>r.url.includes('/identify-material')?untilAbort(r):undefined);const pending=f.w.handlePhoto(new f.w.File(['synthetic'],'photo.png'));await tick();f.fireTimeouts();await pending;assert.match(f.$('identifyStatus').textContent,/took too long/);assert.equal(f.$('retryIdentify').classList.contains('hidden'),false);assert.equal(f.$('capture').classList.contains('hidden'),false);
- },{captureTimeouts:true});
+ await run('photo identification fails closed even if the disabled control is tampered with',async f=>{
+  f.w.compressImage=async()=> 'data:image/jpeg;base64,SYNTHETIC';await f.w.handlePhoto({name:'photo.png'});f.$('identifyPhotoBtn').disabled=false;f.click('identifyPhotoBtn');await f.w.identify();
+  assert.equal(f.calls.filter(r=>r.url.includes('/functions/')).length,0);assert.equal(f.$('preview').classList.contains('hidden'),false);
+ });
  await run('activation renders only known public failures and generic server errors',async f=>{
   f.input('llaCode','SYNTHETIC');f.setHook(r=>r.url.includes('/activate_little_labels')?response({success:false,error:'PRIVATE DATABASE DETAIL'}):undefined);f.click('llaActivate');await tick();assert.doesNotMatch(f.$('llaStatus').textContent,/PRIVATE/);assert.match(f.$('llaStatus').textContent,/could not be activated/);assert.equal(f.$('llaActivate').disabled,false);
   f.setHook(r=>r.url.includes('/activate_little_labels')?response({message:'PRIVATE DATABASE DETAIL'},500):undefined);f.click('llaActivate');await tick();assert.doesNotMatch(f.$('llaStatus').textContent,/PRIVATE/);assert.match(f.$('llaStatus').textContent,/Check your connection/);
