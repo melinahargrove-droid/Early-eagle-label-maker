@@ -19,7 +19,10 @@ const root=path.resolve(__dirname,'../dist'),out=path.resolve(__dirname,'../test
   try{
    await page.goto(origin);await page.waitForFunction(()=>window.__previewReady && window.LittleLabelSettings);
    assert.match(await page.locator('#previewNotice').innerText(),/saved only in this browser/i);
-   assert.equal(await page.locator('#account').isVisible(),false);await shot('home');
+   assert.equal(await page.locator('#account').isVisible(),false);
+   assert.match(await page.locator('.footer-note').textContent(),/saved only in this browser.*remain after reload/);
+   assert.doesNotMatch(await page.locator('.footer-note').textContent(),/saved to your account|Session-only changes|lost when you close or reload/);
+   await shot('home');
    const image=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=160;c.height=100;const x=c.getContext('2d');x.fillStyle='#f4db90';x.fillRect(0,0,160,100);x.fillStyle='#285c89';x.fillRect(30,20,80,55);return c.toDataURL('image/png').split(',')[1]});
    await page.locator('#homeGalleryInput').setInputFiles({name:'test-building-blocks.png',mimeType:'image/png',buffer:Buffer.from(image,'base64')});
    await page.locator('#preview').waitFor({state:'visible'});

@@ -86,7 +86,9 @@
     document.querySelectorAll('.ll-ai-note').forEach(el=>{const value='Type the wording yourself. No credits or paid actions are connected here.';if(el.textContent!==value)el.textContent=value});
     const status=document.getElementById('singleSaveStatus');
     if(status?.textContent==='Saved to your account.')status.textContent='Saved only in this browser.';
-    document.querySelectorAll('.footer-note span').forEach(el=>{if(/App build/.test(el.textContent))el.textContent='Isolated manual-photo test'});
+    const footer=document.querySelector('.footer-note');
+    const footerText='Test labels are saved only in this browser. They remain after reload, but clearing browser data removes them. This preview has no account or cloud sync.';
+    if(footer && footer.textContent!==footerText)footer.textContent=footerText;
     document.querySelectorAll('#mliTranslate,#mliAllPics,.mli-picbtn,#productLinkStartBtn,#startBatchPhotoBtn,#normalCleanupBtn,#strongCleanupBtn,#retryCleanupBtn').forEach(el=>{el.disabled=true;el.title='Unavailable in this isolated manual-label preview'});
   }
   async function initialize() {
