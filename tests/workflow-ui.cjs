@@ -111,137 +111,32 @@ async function run(name, test) {
     assert.equal($('tlSecond').value, 'Synthetic Edited Translation');
   });
 
-  await run('Back cancels pending typed continuation and repeated Next shares one operation', async ({ w, $, click, input, tick, visible, typedOpen, deferTranslations }) => {
-    const requests = deferTranslations();
-    click('homeTypeBtn');
-    input('tlEnglish', 'Synthetic Pending');
-    click('tlNext');
-    click('tlNext');
-    assert.equal(requests.length, 1, 'Repeated Next does not start another translation');
-    click('tlBack');
-    w.show('home');
-    requests[0].resolve('Synthetic Late Translation');
-    await tick();
-    assert.ok(!typedOpen());
-    assert.ok(visible('home'), 'A late response must not steal navigation');
-    assert.ok(!visible('preview'));
-    assert.ok(!visible('sets'));
-    assert.equal(w.eval('queue.length'), 0);
-    click('homeTypeBtn');
-    assert.equal($('tlEnglish').value, 'Synthetic Pending');
-    assert.notEqual($('tlSecond').value, 'Synthetic Late Translation');
+  // Automatic-translation scenarios are intentionally replaced by manual-first
+  // assertions. Paid explicit-action races are covered by manual-translation*.cjs.
+  await run('manual Review accepts a blank second line and repeated clicks make no AI call', async ({ $, click, input, tick, visible, typedOpen, deferTranslations }) => {
+    const requests = deferTranslations(); click('homeTypeBtn'); input('tlEnglish', 'Synthetic Manual');
+    click('tlNext'); click('tlNext'); await tick();
+    assert.equal(requests.length, 0); assert.ok(visible('preview')); assert.ok(!typedOpen()); assert.equal($('spanishInput').value, '');
   });
-
-  await run('manual translation wins over an older automatic response', async ({ $, click, input, tick, visible, typedOpen, deferTranslations }) => {
-    const requests = deferTranslations();
-    click('homeTypeBtn');
-    input('tlEnglish', 'Synthetic Manual');
-    click('tlNext');
-    assert.equal(requests.length, 1);
-    input('tlSecond', 'Teacher-approved translation');
-    requests[0].resolve('Unwanted late translation');
-    await tick();
-    assert.equal($('tlSecond').value, 'Teacher-approved translation');
-    assert.ok(typedOpen(), 'Editing invalidates the older Next continuation');
-    assert.ok(!visible('preview'));
-    click('tlNext');
-    await tick();
-    assert.ok(visible('preview'));
-    assert.equal($('spanishInput').value, 'Teacher-approved translation');
-    assert.equal(requests.length, 1);
+  await run('manual second wording survives English edits and Review without AI', async ({ $, click, input, tick, visible, deferTranslations }) => {
+    const requests = deferTranslations(); click('homeTypeBtn'); input('tlEnglish', 'Old wording'); input('tlSecond', 'Teacher wording');
+    input('tlEnglish', 'New wording'); assert.equal($('tlSecond').value, 'Teacher wording'); click('tlNext'); await tick();
+    assert.ok(visible('preview')); assert.equal($('spanishInput').value, 'Teacher wording'); assert.equal(requests.length, 0);
   });
-
-  await run('account-screen interruption and reopening cannot resume an obsolete Review request', async ({ w, $, click, input, tick, visible, typedOpen, deferTranslations }) => {
-    const requests = deferTranslations();
-    click('homeTypeBtn');
-    input('tlEnglish', 'Synthetic Interrupted Draft');
-    click('tlNext');
-    w.show('account');
-    w.show('home');
-    click('homeTypeBtn');
-    requests[0].resolve('Translation from an interrupted request');
-    await tick();
-    assert.ok(typedOpen());
-    assert.ok(!visible('preview'), 'Reopening a draft must not reactivate an old Next click');
-    assert.equal($('tlEnglish').value, 'Synthetic Interrupted Draft');
-    assert.notEqual($('tlSecond').value, 'Translation from an interrupted request');
+  await run('account-screen interruption and reopening preserve manual typed work without a continuation', async ({ w, $, click, input, tick, visible, typedOpen, deferTranslations }) => {
+    const requests = deferTranslations(); click('homeTypeBtn'); input('tlEnglish', 'Interrupted draft');
+    w.show('account'); w.show('home'); click('homeTypeBtn'); await tick();
+    assert.ok(typedOpen()); assert.ok(!visible('preview')); assert.equal($('tlEnglish').value, 'Interrupted draft'); assert.equal(requests.length, 0);
   });
-
-  await run('wording changes invalidate stale translations and stale Review navigation', async ({ $, click, input, tick, visible, typedOpen, deferTranslations }) => {
-    const requests = deferTranslations();
-    click('homeTypeBtn');
-    input('tlEnglish', 'Synthetic Old Wording');
-    click('tlNext');
-    input('tlEnglish', 'Synthetic New Wording');
-    requests[0].resolve('Old wording translation');
-    await tick();
-    assert.ok(typedOpen());
-    assert.ok(!visible('preview'));
-    assert.equal($('tlEnglish').value, 'Synthetic New Wording');
-    assert.notEqual($('tlSecond').value, 'Old wording translation');
-    click('tlNext');
-    assert.equal(requests.length, 2);
-    requests[1].resolve('New wording translation');
-    await tick();
-    assert.ok(visible('preview'));
-    assert.equal($('englishInput').value, 'Synthetic New Wording');
-    assert.equal($('spanishInput').value, 'New wording translation');
+  await run('English-only review excludes hidden second text and Back preserves the typed manual draft', async ({ $, click, input, tick, visible, setLanguage, deferTranslations }) => {
+    const requests = deferTranslations(); click('homeTypeBtn'); input('tlEnglish', 'Blocks'); input('tlSecond', 'Manual second wording');
+    setLanguage('none'); click('tlNext'); await tick(); assert.ok(visible('preview')); assert.equal($('spanishInput').value, '');
+    click('previewBack'); setLanguage('es'); assert.equal($('tlSecond').value, 'Manual second wording'); assert.equal(requests.length, 0);
   });
-
-  await run('language changes invalidate stale typed continuation', async ({ $, click, input, tick, visible, typedOpen, setLanguage, deferTranslations }) => {
-    const requests = deferTranslations();
-    click('homeTypeBtn');
-    input('tlEnglish', 'Synthetic English Only');
-    click('tlNext');
-    setLanguage('none');
-    requests[0].resolve('Obsolete second-language wording');
-    await tick();
-    assert.ok(typedOpen());
-    assert.ok(!visible('preview'));
-    assert.equal($('tlSecond').value, '');
-    click('tlNext');
-    await tick();
-    assert.ok(visible('preview'));
-    assert.equal($('englishInput').value, 'Synthetic English Only');
-    assert.equal($('spanishInput').value, '');
-  });
-
-  await run('typed review rejects a translation response from an older label', async ({ w, $, click, input, tick, visible, deferTranslations }) => {
-    const requests = deferTranslations();
-    w.show('preview');
-    $('englishInput').value = 'Synthetic Previous Label';
-    $('spanishInput').value = 'Previous Translation';
-    const previousTranslation = w.autoTranslateEnglish();
-    assert.equal(requests.length, 1);
-    w.show('home');
-    click('homeTypeBtn');
-    input('tlEnglish', 'Synthetic New Typed Label');
-    input('tlSecond', 'Teacher-approved new translation');
-    click('tlNext');
-    await tick();
-    assert.ok(visible('preview'));
-    requests[0].resolve('Late translation of the previous label');
-    await previousTranslation;
-    await tick();
-    assert.equal($('englishInput').value, 'Synthetic New Typed Label');
-    assert.equal($('spanishInput').value, 'Teacher-approved new translation');
-  });
-
-  await run('manual wording in Review survives an older automatic translation response', async ({ w, $, click, input, tick, deferTranslations }) => {
-    click('homeTypeBtn');
-    input('tlEnglish', 'Synthetic Reviewed Label');
-    input('tlSecond', 'Synthetic Initial Translation');
-    click('tlNext');
-    await tick();
-    const requests = deferTranslations();
-    const translation = w.autoTranslateEnglish();
-    assert.equal(requests.length, 1);
-    input('spanishInput', 'Teacher-approved review edit');
-    requests[0].resolve('Automatic result predating the edit');
-    await translation;
-    await tick();
-    assert.equal($('spanishInput').value, 'Teacher-approved review edit');
-    assert.ok(!$('translationStatus').textContent.includes('updated automatically'));
+  await run('legacy auto-translation entry points do nothing and cannot overwrite manual review', async ({ w, $, click, input, tick, deferTranslations }) => {
+    const requests = deferTranslations(); click('homeTypeBtn'); input('tlEnglish', 'Reviewed label'); input('tlSecond', 'Initial wording'); click('tlNext'); await tick();
+    await w.autoTranslateEnglish(); w.scheduleAutoTranslation(); input('spanishInput', 'Teacher-approved review edit'); await tick();
+    assert.equal(requests.length, 0); assert.equal($('spanishInput').value, 'Teacher-approved review edit');
   });
 
   await run('an older review debounce cannot translate a newer manually worded label', async ({ w, $, click, input, tick }) => {
@@ -263,23 +158,11 @@ async function run(name, test) {
     assert.equal($('spanishInput').value, 'Teacher-approved debounced translation');
   });
 
-  await run('account changes clear private typed drafts and suppress late responses', async ({ w, $, click, input, tick, visible, typedOpen, deferTranslations }) => {
-    const requests = deferTranslations();
-    click('homeTypeBtn');
-    input('tlEnglish', 'Synthetic Private Draft');
-    click('tlNext');
-    w.eval(`currentUser = {id:'synthetic-other-owner'}; updateAccountUI(); show('account');`);
-    requests[0].resolve('Previous account translation');
-    await tick();
-    assert.ok(!typedOpen());
-    assert.ok(visible('account'));
-    assert.ok(!visible('preview'));
-    w.show('home');
-    click('homeTypeBtn');
-    assert.equal($('tlEnglish').value, '');
-    assert.equal($('tlSecond').value, '');
-    assert.equal(w.eval('queue.length'), 0);
-    assert.equal(w.eval('library.length'), 0);
+  await run('account changes clear private typed drafts without starting AI', async ({ w, $, click, input, tick, visible, typedOpen, deferTranslations }) => {
+    const requests = deferTranslations(); click('homeTypeBtn'); input('tlEnglish', 'Synthetic private draft'); input('tlSecond', 'Private manual wording'); click('tlNext');
+    w.eval(`currentUser = {id:'synthetic-other-owner'}; updateAccountUI(); show('account');`); await tick();
+    assert.ok(!typedOpen()); assert.ok(visible('account')); assert.ok(!visible('preview')); w.show('home'); click('homeTypeBtn');
+    assert.equal($('tlEnglish').value, ''); assert.equal($('tlSecond').value, ''); assert.equal(requests.length, 0); assert.equal(w.eval('queue.length'), 0); assert.equal(w.eval('library.length'), 0);
   });
 
   await run('failed single-label save retains the draft and successful session save explains its limit', async ({ w, $, click, input, tick, visible, typedOpen }) => {

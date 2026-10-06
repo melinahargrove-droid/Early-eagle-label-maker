@@ -49,3 +49,29 @@ jobs:
           name: customer-access-previews
           path: test-results/customer-access/*.png
           if-no-files-found: ignore
+
+  manual-first-browsers:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Exercise manual-first credit flows with synthetic data
+        run: node tests/manual-translation-browser.cjs
+        env:
+          BROWSER_ENGINE: ${{ matrix.browser }}
+      - name: Upload manual-first browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manual-first-${{ matrix.browser }}
+          path: test-results/manual-first/${{ matrix.browser }}/
+          if-no-files-found: ignore

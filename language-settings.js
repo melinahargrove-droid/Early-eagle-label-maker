@@ -1,81 +1,53 @@
 (() => {
   const cfg = () => window.LittleLabelSettings?.get?.() || { language: 'es' };
   const names = () => window.LittleLabelSettings?.languages || { es: 'Spanish', none: 'English Only' };
-  let request = 0;
+  let translation, priorLanguage = cfg().language, hiddenWording = null;
   function current() { const id = cfg().language || 'es'; return { id, name: names()[id] || id }; }
-  function invalidate() { request++; clearTimeout(translationTimer); }
+  function invalidate() { clearTimeout(translationTimer); translationRequestId++; translation?.changed(); }
   function applyUI() {
     const language = current(), label = document.querySelector('label[for="spanishInput"]');
     const input = document.getElementById('spanishInput'), status = document.getElementById('translationStatus');
-    if (label) label.textContent = language.id === 'none' ? 'Second language' : language.name;
+    if (label) label.textContent = language.id === 'none' ? 'Second language' : `${language.name} wording (optional)`;
     if (input) {
-      const hide = language.id === 'none'; input.style.display = hide ? 'none' : '';
-      if (label) label.style.display = hide ? 'none' : '';
-      if (hide) input.value = '';
+      const hide = language.id === 'none';
+      if (hide && priorLanguage !== 'none') hiddenWording = { draft: singleDraftContext, value: input.value };
+      if (!hide && priorLanguage === 'none' && hiddenWording?.draft === singleDraftContext && !input.value) input.value = hiddenWording.value;
+      input.style.display = hide ? 'none' : ''; if (label) label.style.display = hide ? 'none' : '';
+      if (hide) input.value = ''; // The existing save path must not include hidden second-language text.
+      if (status && priorLanguage !== language.id) status.textContent = hide ? 'English-only labels are on.' : 'Check your manual second-language wording before saving.';
     }
-    const translated = document.getElementById('labelSpanish');
-    if (translated) translated.style.display = language.id === 'none' ? 'none' : '';
-    if (status && language.id === 'none') status.textContent = 'English-only labels are on.';
+    priorLanguage = language.id;
+    const translated = document.getElementById('labelSpanish'); if (translated) translated.style.display = language.id === 'none' ? 'none' : '';
     document.querySelectorAll('.sheet-page-es,.print-label-es').forEach(x => x.style.display = language.id === 'none' ? 'none' : '');
+    translation?.changed();
   }
-  async function translate() {
-    const language = current(), english = document.getElementById('englishInput')?.value.trim();
-    const input = document.getElementById('spanishInput'), status = document.getElementById('translationStatus');
-    const version = ++request, owner = currentUser?.id || null, navigation = workflowNavigationVersion;
-    if (!english || !input) return;
-    if (language.id === 'none') {
-      input.value = ''; syncLabel?.(); if (status) status.textContent = 'English-only labels are on.'; return;
-    }
-    const stillCurrent = () => version === request && owner === (currentUser?.id || null)
-      && navigation === workflowNavigationVersion && language.id === current().id
-      && english === document.getElementById('englishInput')?.value.trim();
-    if (status) status.textContent = `Translating ${language.name}…`;
-    try {
-      const response = await littleLabelsAIFetch(TRANSLATE_URL, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ english, target_language: language.id, targetLanguage: language.name, language: language.id })
-      });
-      let data = {}; try { data = await response.json(); } catch {}
-      const value = data.translation || data.translated || data.text || (language.id === 'es' ? data.spanish : null);
-      if (!response.ok || !value) throw Error(data.error || data.details || `Request failed (${response.status})`);
-      if (!stillCurrent()) return;
-      input.value = value; lastAutoTranslatedEnglish = english; syncLabel?.();
-      if (status) status.textContent = `✓ ${language.name} updated automatically`;
-    } catch (error) {
-      console.error(error);
-      if (stillCurrent() && status) status.textContent = `${language.name} could not update automatically. You can still edit it manually.`;
-    }
-  }
-  function patch() {
-    autoTranslateEnglish = translate;
-    scheduleAutoTranslation = function () {
-      invalidate();
-      const language = current(), status = document.getElementById('translationStatus');
-      if (language.id === 'none') { if (status) status.textContent = 'English-only labels are on.'; return; }
-      if (status) status.textContent = 'Waiting for you to finish typing…';
-      const version = request, navigation = workflowNavigationVersion;
-      translationTimer = setTimeout(() => {
-        if (version === request && navigation === workflowNavigationVersion) translate();
-      }, 900);
-    };
+  function install() {
+    // Neutralize the base entry points too; legacy event listeners cannot cause a charge.
+    autoTranslateEnglish = function () { return; };
+    scheduleAutoTranslation = invalidate;
     const originalSync = window.syncLabel;
     syncLabel = function () {
       if (typeof originalSync === 'function') originalSync();
       const language = current(), translated = document.getElementById('labelSpanish');
-      if (translated) {
-        translated.textContent = language.id === 'none' ? '' : (document.getElementById('spanishInput')?.value || '');
-        translated.style.display = language.id === 'none' ? 'none' : '';
-      }
+      if (translated) { translated.textContent = language.id === 'none' ? '' : (document.getElementById('spanishInput')?.value || ''); translated.style.display = language.id === 'none' ? 'none' : ''; }
     };
+    const host = document.createElement('div'); host.id = 'singleTranslationTools';
+    document.getElementById('translationStatus').before(host);
+    translation = window.LittleLabelsTranslationCredits?.attach?.({ host,
+      read: () => ({ english: document.getElementById('englishInput').value, second: document.getElementById('spanishInput').value,
+        language: current().id, draft: singleDraftContext, save: singleSaveJob, navigation: workflowNavigationVersion,
+        visible: !document.getElementById('preview').classList.contains('hidden'), blocked: !!singleSaveJob && !singleSaveJob.complete }),
+      apply: text => { document.getElementById('spanishInput').value = text; syncLabel(); } });
+    if (!translation) host.textContent = 'AI translation is unavailable. You can keep editing and saving manually.';
+    window.LittleLabelsSingleTranslation = translation;
     applyUI();
-  }
-  function install() {
-    patch();
-    addEventListener('little-label-settings-changed', () => { invalidate(); applyUI(); translate(); });
-    document.addEventListener('little-label-account-changed', invalidate);
+    addEventListener('little-label-settings-changed', () => { invalidate(); applyUI(); syncLabel(); });
+    document.addEventListener('little-label-account-changed', () => { hiddenWording = null; invalidate(); });
     document.getElementById('spanishInput')?.addEventListener('input', invalidate);
-    document.getElementById('chooseSetBtn')?.addEventListener('click', applyUI);
+    document.getElementById('chooseSetBtn')?.addEventListener('click', () => { invalidate(); applyUI(); });
     document.getElementById('editIdentification')?.addEventListener('click', applyUI);
+    const preview = document.getElementById('preview');
+    new MutationObserver(() => { invalidate(); if (!preview.classList.contains('hidden')) { applyUI(); translation?.refresh(); } }).observe(preview, { attributes: true, attributeFilter: ['class'] });
   }
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', install, { once: true }) : install();
 })();

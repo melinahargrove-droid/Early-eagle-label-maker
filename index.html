@@ -1576,54 +1576,11 @@ function populateConfirm(){
   $("translationStatus").textContent="";
   syncLabel();
 }
-async function autoTranslateEnglish(){
-  const english = $("englishInput").value.trim();
-  const status = $("translationStatus");
-
-  if(!english){
-    status.textContent="";
-    return;
-  }
-
-  if(english === lastAutoTranslatedEnglish){
-    return;
-  }
-
-  const requestId = ++translationRequestId;
-  status.textContent="Translating Spanish…";
-
-  try{
-    const response = await littleLabelsAIFetch(TRANSLATE_URL,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({english})
-    });
-
-    let data={};
-    try{ data=await response.json(); }catch{}
-
-    if(requestId !== translationRequestId) return;
-
-    if(!response.ok || !data.success || !data.spanish){
-      throw new Error(data.error || data.details || `Request failed (${response.status})`);
-    }
-
-    $("spanishInput").value=data.spanish;
-    lastAutoTranslatedEnglish=english;
-    syncLabel();
-    status.textContent="✓ Spanish updated automatically";
-  }catch(err){
-    console.error("Auto-translation error:",err);
-    if(requestId === translationRequestId){
-      status.textContent="Spanish could not update automatically. You can still edit it manually.";
-    }
-  }
-}
-
+// Single-label translation is an explicit credit action. Never invoke AI from edits.
+function autoTranslateEnglish(){ return; }
 function scheduleAutoTranslation(){
-  clearTimeout(translationTimer);
-  $("translationStatus").textContent="Waiting for you to finish typing…";
-  translationTimer=setTimeout(autoTranslateEnglish,900);
+  clearTimeout(translationTimer); translationRequestId++;
+  window.LittleLabelsSingleTranslation?.changed();
 }
 
 function syncLabel(){
@@ -3036,6 +2993,7 @@ updateSetSummary();
 <!-- LITTLE_LABELS_DIRECT_PATCHES_START -->
 <script src="./ai-client.js?v=110"></script>
 <script src="./commercial-access.js?v=116"></script>
+<script src="./translation-credit-controls.js?v=manual-first-candidate"></script>
 <script src="./little-labels-admin.js?v=108"></script>
 <script src="./v1-audit-polish.js?v=116"></script>
 <script src="./home-grid-order.js?v=108"></script>
