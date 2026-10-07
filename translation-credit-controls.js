@@ -92,6 +92,10 @@
   }
   let featureDialog = null, featureReturnFocus = null;
   const featureBackground = new Map();
+  const accessGateVisible = () => {
+    const gate = document.getElementById('llAccessGate');
+    return !!gate && !gate.hidden && !gate.classList.contains('lla-hidden');
+  };
   function closeFeatureInfo() {
     if (!featureDialog || featureDialog.hidden) return;
     featureDialog.hidden = true;
@@ -101,6 +105,7 @@
     featureReturnFocus = null;
   }
   function openFeatureInfo() {
+    if (accessGateVisible()) return;
     if (!featureDialog) {
       featureDialog = document.createElement('div'); featureDialog.id = 'llFeatureInfo'; featureDialog.hidden = true;
       featureDialog.setAttribute('role','dialog'); featureDialog.setAttribute('aria-modal','true'); featureDialog.setAttribute('aria-labelledby','llFeatureInfoTitle');
@@ -109,19 +114,19 @@
       for (const button of featureDialog.querySelectorAll('button')) button.addEventListener('click',closeFeatureInfo);
       featureDialog.addEventListener('click', event => { if (event.target === featureDialog) closeFeatureInfo(); });
       document.addEventListener('keydown', event => {
-        if (featureDialog.hidden) return;
+        if (featureDialog.hidden || accessGateVisible()) return;
         if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); closeFeatureInfo(); return; }
         if (event.key !== 'Tab') return;
         const buttons = [...featureDialog.querySelectorAll('button')], first = buttons[0], last = buttons.at(-1);
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       },true);
-      document.addEventListener('focusin', event => { if (!featureDialog.hidden && !featureDialog.contains(event.target)) featureDialog.querySelector('button').focus(); },true);
+      document.addEventListener('focusin', event => { if (!featureDialog.hidden && !accessGateVisible() && !featureDialog.contains(event.target)) featureDialog.querySelector('button').focus(); },true);
     }
     if (!featureDialog.hidden) return;
     featureReturnFocus = document.activeElement;
     for (const el of document.body.children) {
-      if (el === featureDialog || ['SCRIPT','STYLE'].includes(el.tagName)) continue;
+      if (el === featureDialog || el.id === 'llAccessGate' || ['SCRIPT','STYLE'].includes(el.tagName)) continue;
       featureBackground.set(el,{inert:el.inert,aria:el.getAttribute('aria-hidden')}); el.inert = true; el.setAttribute('aria-hidden','true');
     }
     featureDialog.hidden = false; featureDialog.querySelector('button').focus({preventScroll:true});

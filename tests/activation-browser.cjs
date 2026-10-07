@@ -160,7 +160,8 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
     {
       const authDelay = deferred(), statusDelay = deferred();
       const f = await fixture({ user: permanent('synthetic-slow'), authDelay, status: () => statusDelay.promise });
-      await gate(f.page, 'llaAccountPane');
+      await gate(f.page, 'llaCheckingPane');
+      await expect(f.page.locator('#llaCheckingTitle')).toHaveText('Opening Little Labels…');
       assert.equal(f.model.statusCalls.length, 0);
       authDelay.resolve(); await f.ready();
       // Base activation and owner capability each verify the same identity once.

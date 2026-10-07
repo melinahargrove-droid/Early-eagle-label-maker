@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eff6ff">
   <title>Little Labels</title>
-  <link rel="manifest" href="manifest.webmanifest?v=117">
+  <link rel="manifest" href="manifest.webmanifest?v=118">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -403,7 +403,7 @@
     <button class="secondary" id="makeListBack">← Home</button>
     <div class="card">
       <h2>Make a List</h2>
-      <p class="muted">Enter one classroom material per line. The app will create bilingual label drafts for all of them at once.</p>
+      <p class="muted">Enter one classroom material per line, then review your wording. Add your own photos or keep text-only labels.</p>
       <label for="makeListInput">One material per line</label>
       <textarea id="makeListInput" placeholder="stickers&#10;googly eyes&#10;magnetic letters&#10;farm animals"></textarea>
       <p class="tiny">You’ll review everything before it is saved or added to Ready to Print.</p>
@@ -547,13 +547,13 @@
     <button class="secondary" id="accountBack">← Home</button>
     <div class="card">
       <h2>Use the Same Labels Everywhere</h2>
-      <p class="muted">Create an account on your phone first to keep everything you've already saved, then sign into that same account on your computer.</p>
+      <p class="muted">Create or sign into your Little Labels account on any device. Use the same account to access your saved labels and Ready to Print copies.</p>
 
       <div id="accountCurrent" class="status ok hidden"></div>
 
       <div id="anonymousAccountPane">
         <h2 style="margin-top:14px">Create My Account</h2>
-        <p class="muted">This converts your current private phone session into a permanent account. Your existing labels stay attached because your Supabase user ID stays the same.</p>
+        <p class="muted">Create your account here to keep the labels from this session. Then sign into that same account on your other devices.</p>
 
         <label for="accountEmail">Email address</label>
         <input id="accountEmail" type="email" autocomplete="email" placeholder="you@example.com">
@@ -624,7 +624,7 @@
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 117</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 118</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -637,6 +637,7 @@ const SUPABASE_URL = "https://ctmqvbsjliinlddfolti.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AYbs6V2u0qPo-jLTkTFlBQ_1ps7DaZC";
 const SESSION_STORAGE_KEY = "eea_label_maker_supabase_session_v1";
 let cloudReady = false;
+let cloudStartupPending = true;
 let pendingSyncRequests=0,pendingSyncWrites=0,syncErrorVersion=0,syncFailed=false,cloudLoaded=false,cloudLoadedOwner=null,cloudLoadedSessionRevision=-1;
 const failedSyncWrites=new Set();
 let syncOwner=null,syncGeneration=0,syncSessionRevision=-1;
@@ -694,7 +695,7 @@ async function authFetch(path, options={}){
   let data=null;
   try{data=await res.json();}catch{}
   if(!res.ok){
-    const msg=data?.msg || data?.message || data?.error_description || data?.error || `Supabase auth error (${res.status})`;
+    const msg=data?.msg || data?.message || data?.error_description || data?.error || `Sign-in request failed (${res.status})`;
     const error=new Error(msg);error.status=res.status;error.code=data?.code||data?.error_code;throw error;
   }
   return data;
@@ -702,7 +703,7 @@ async function authFetch(path, options={}){
 
 async function userAuthFetch(path,options={}){
   const context=captureCloudContext();
-  if(!cloudSession?.access_token) throw new Error("No signed-in Supabase session is available.");
+  if(!cloudSession?.access_token) throw new Error("Sign in again to continue.");
   const headers={
     "apikey":SUPABASE_PUBLISHABLE_KEY,
     "Authorization":`Bearer ${cloudSession.access_token}`,
@@ -714,7 +715,7 @@ async function userAuthFetch(path,options={}){
   try{data=await res.json();}catch{}
   assertCloudContext(context,false);
   if(!res.ok){
-    const msg=data?.msg || data?.message || data?.error_description || data?.error || `Supabase account error (${res.status})`;
+    const msg=data?.msg || data?.message || data?.error_description || data?.error || `Account request failed (${res.status})`;
     const error=new Error(msg);error.status=res.status;error.code=data?.code||data?.error_code;throw error;
   }
   return data;
@@ -762,7 +763,7 @@ function updateAccountUI(){
     $("accountCurrent").className="status ok";
   }else{
     $("accountStatusText").textContent="Private device session";
-    $("accountStatusSub").textContent="Create an account to sync phone + computer";
+    $("accountStatusSub").textContent="Sign in to access saved labels across devices";
     $("accountBtn").textContent="Sync Devices";
   }
 }
@@ -1086,7 +1087,7 @@ async function restFetch(path,options={},retry=true,context=captureCloudContext(
     for(let attempt=0;attempt<2;attempt++){
       assertCloudContext(context);
       const token=cloudSession?.access_token,refreshToken=cloudSession?.refresh_token;
-      if(!token)throw new Error("No Supabase session is available.");
+      if(!token)throw new Error("Sign in again to continue.");
       const headers={...(options.headers||{}),"apikey":SUPABASE_PUBLISHABLE_KEY,
         "Authorization":`Bearer ${token}`,"Content-Type":"application/json"};
       const res=await fetch(SUPABASE_URL+"/rest/v1/"+path,{...options,headers});
@@ -1100,7 +1101,7 @@ async function restFetch(path,options={},retry=true,context=captureCloudContext(
       let data=null;
       if(res.status!==204){try{data=await res.json();}catch{}}
       assertCloudContext(context);
-      if(!res.ok)throw new Error(data?.message || data?.hint || data?.details || data?.error || `Supabase data error (${res.status})`);
+      if(!res.ok)throw new Error(data?.message || data?.hint || data?.details || data?.error || `Saving request failed (${res.status})`);
       if(writing)failedSyncWrites.delete(writeKey);
       return data;
     }
@@ -1148,6 +1149,9 @@ async function initCloud(){
     updateAccountUI();
     status.className="status error";
     status.textContent="Cloud saving couldn't connect: "+(err?.message||"unknown error")+". The app will still work for this session.";
+  }finally{
+    cloudStartupPending=false;
+    document.dispatchEvent(new CustomEvent('little-label-startup-complete'));
   }
 }
 async function loadCloudData(){
@@ -1293,7 +1297,7 @@ function show(id){
   ['queueSaveNotice','librarySaveNotice'].forEach(key=>$(key)?.classList.add('hidden'));
   if(id==='account'||id==='passwordRecovery'){
     // Dismiss creation/help layers, never the purchase/activation gate.
-    const overlays={mlIsolated:'mli-hidden',nameLabelsOverlay:'hide',typeLabelOverlay:'tl-hidden',llSettings:'lls-hidden',llHelp:'llh-hidden',llAdmin:'lla-hidden'};
+    const overlays={mlIsolated:'mli-hidden',nameLabelsOverlay:'hide',typeLabelOverlay:'tl-hidden',llSettings:'lls-hidden',llHelp:'llh-hidden',llAdmin:'lla-hidden',llLibraryEditor:'hidden'};
     Object.entries(overlays).forEach(([key,hiddenClass])=>document.getElementById(key)?.classList.add(hiddenClass));
     document.getElementById('llWelcome')?.remove();
   }
@@ -2207,8 +2211,10 @@ function refreshQueue(){
     left.append(name,spanish,size);
     const actions=document.createElement("div"); actions.className="queue-actions";
     const printed=document.createElement("button"); printed.className="secondary"; printed.textContent="Mark printed";
+    printed.setAttribute('aria-label',`Mark ${item.english||'label'} printed`);
     printed.addEventListener("click",()=>markPrinted(item.id));
     const remove=document.createElement("button"); remove.className="secondary danger"; remove.textContent="Remove";
+    remove.setAttribute('aria-label',`Remove ${item.english||'label'} from Ready to Print`);
     remove.addEventListener("click",()=>removeQueueItem(item.id));
     actions.append(printed,remove);
     d.append(left,actions); wrap.appendChild(d);
@@ -2294,14 +2300,20 @@ function refreshLibrary(){
     const button=document.createElement("button");
     button.className="primary";
     button.textContent="Reprint";
+    button.setAttribute('aria-label',`Reprint ${item.english||'label'}`);
     button.addEventListener("click",()=>openReprint(item));
+    const edit=document.createElement('button');
+    edit.className='secondary';edit.textContent='Edit Label';edit.dataset.labelId=item.id;
+    edit.setAttribute('aria-label',`Edit label ${item.english||'label'}`);
+    edit.addEventListener('click',()=>window.LittleLabelsLibraryEditor?.open(item,edit));
 
     const del=document.createElement("button");
     del.className="secondary danger";
     del.textContent="Delete";
+    del.setAttribute('aria-label',`Delete saved label ${item.english||'label'}`);
     del.addEventListener("click",()=>deleteLibraryLabel(item));
 
-    actions.append(button,del);
+    actions.append(edit,button,del);
     d.append(left,actions);
     wrap.appendChild(d);
   });
@@ -2352,7 +2364,7 @@ function openDedicatedBatch(mode){
     $("batchDescription").textContent="Paste a product page link and the app will create a label draft using the real product title and image when available.";
   }else{
     $("batchTitle").textContent="Make a List";
-    $("batchDescription").textContent="Enter one material per line and create multiple bilingual label drafts at once.";
+    $("batchDescription").textContent="Enter one material per line, then review each label. Second-language wording is optional.";
   }
   $("batchProgress").classList.add("hidden");
   show("batch");
@@ -3012,42 +3024,46 @@ updateSetSummary();
   const handledRecovery = await startRecoveryFromUrl();
   if(!handledRecovery){
     await initCloud();
+  }else{
+    cloudStartupPending=false;
+    document.dispatchEvent(new CustomEvent('little-label-startup-complete'));
   }
 })();
 
 </script>
 
 <!-- LITTLE_LABELS_DIRECT_PATCHES_START -->
-<script src="./ai-client.js?v=117"></script>
-<script src="./commercial-access.js?v=117"></script>
-<script src="./translation-credit-controls.js?v=117"></script>
-<script src="./little-labels-admin.js?v=117"></script>
-<script src="./v1-audit-polish.js?v=117"></script>
-<script src="./home-grid-order.js?v=117"></script>
-<script src="./onboarding-help.js?v=117"></script>
-<script src="./label-workflow-save.js?v=117"></script>
-<script src="./make-list-isolated.js?v=117"></script>
-<script src="./make-list-polish.js?v=117"></script>
-<script src="./smart-print-layout.js?v=117"></script>
-<script src="./name-labels.js?v=117"></script>
-<script src="./name-labels-queue.js?v=117"></script>
-<script src="./queue-library-polish.js?v=117"></script>
-<script src="./little-labels-theme.js?v=117"></script>
-<script src="./label-settings.js?v=117"></script>
-<script src="./language-settings.js?v=117"></script>
-<script src="./identification-language.js?v=117"></script>
-<script src="./confirmation-cleanup.js?v=117"></script>
-<script src="./type-a-label.js?v=117"></script>
-<script src="./blank-input-placeholders.js?v=117"></script>
-<script src="./sellable-label-wiring.js?v=117"></script>
-<script src="./sellable-label-render.js?v=117"></script>
-<script src="./name-only-render.js?v=117"></script>
-<script src="./true-size-rotation-fix.js?v=117"></script>
-<script src="./background-cleanup-toggle.js?v=117"></script>
-<script src="./home-settings-gear.js?v=117"></script>
-<script src="./print-blank-fix.js?v=117"></script>
-<script src="./pdf-print.js?v=117"></script>
-<script src="./pwa-version-fix.js?v=117"></script>
+<script src="./ai-client.js?v=118"></script>
+<script src="./commercial-access.js?v=118"></script>
+<script src="./translation-credit-controls.js?v=118"></script>
+<script src="./little-labels-admin.js?v=118"></script>
+<script src="./v1-audit-polish.js?v=118"></script>
+<script src="./home-grid-order.js?v=118"></script>
+<script src="./onboarding-help.js?v=118"></script>
+<script src="./label-workflow-save.js?v=118"></script>
+<script src="./make-list-isolated.js?v=118"></script>
+<script src="./make-list-polish.js?v=118"></script>
+<script src="./smart-print-layout.js?v=118"></script>
+<script src="./name-labels.js?v=118"></script>
+<script src="./name-labels-queue.js?v=118"></script>
+<script src="./queue-library-polish.js?v=118"></script>
+<script src="./library-label-editor.js?v=118"></script>
+<script src="./little-labels-theme.js?v=118"></script>
+<script src="./label-settings.js?v=118"></script>
+<script src="./language-settings.js?v=118"></script>
+<script src="./identification-language.js?v=118"></script>
+<script src="./confirmation-cleanup.js?v=118"></script>
+<script src="./type-a-label.js?v=118"></script>
+<script src="./blank-input-placeholders.js?v=118"></script>
+<script src="./sellable-label-wiring.js?v=118"></script>
+<script src="./sellable-label-render.js?v=118"></script>
+<script src="./name-only-render.js?v=118"></script>
+<script src="./true-size-rotation-fix.js?v=118"></script>
+<script src="./background-cleanup-toggle.js?v=118"></script>
+<script src="./home-settings-gear.js?v=118"></script>
+<script src="./print-blank-fix.js?v=118"></script>
+<script src="./pdf-print.js?v=118"></script>
+<script src="./pwa-version-fix.js?v=118"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>

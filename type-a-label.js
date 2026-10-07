@@ -17,9 +17,10 @@
   }
   function open() {
     if (owner !== (currentUser?.id || null)) reset();
-    invalidate(); $('typeLabelOverlay').classList.remove('tl-hidden'); render(); translation?.refresh(); $('tlEnglish').focus();
+    invalidate(); $('typeLabelOverlay').classList.remove('tl-hidden'); render(); translation?.refresh();
+    window.LittleLabelsDialog?.open($('typeLabelOverlay'),{onClose:()=>{close();show('home');},initialFocus:$('tlEnglish'),returnFocus:$('homeTypeBtn')});$('tlEnglish').focus();
   }
-  function close() { invalidate(); $('typeLabelOverlay').classList.add('tl-hidden'); }
+  function close() { invalidate(); $('typeLabelOverlay').classList.add('tl-hidden');window.LittleLabelsDialog?.close($('typeLabelOverlay')); }
   function next() {
     if (!isOpen()) return;
     const english = $('tlEnglish').value.trim();

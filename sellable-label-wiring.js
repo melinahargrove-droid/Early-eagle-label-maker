@@ -83,21 +83,32 @@
 
   try{sizesForBatchSet=function(){const v=document.getElementById('batchSetSelect')?.value||'';if(v.startsWith('single:'))return [sizeString(v.slice(7))];if(v.startsWith('set:'))return sizesFromSet(selectableSets().find(s=>s.id===v.slice(4)));return sizesFromSet(selectableSets()[0])}}catch{}
 
-  let reprintChoice={mode:'set',id:null};
+  const reprintPreferenceKey='littleLabelsReprintChoiceV1';
+  let reprintChoice={mode:'set',id:null},reprintSize='';
+  try{const saved=JSON.parse(localStorage.getItem(reprintPreferenceKey)||'null');if(saved&&['set','single'].includes(saved.mode)){reprintChoice={mode:saved.mode,id:typeof saved.id==='string'?saved.id:null};reprintSize=typeof saved.size==='string'?saved.size:''}}catch{}
+  function rememberReprint(){try{localStorage.setItem(reprintPreferenceKey,JSON.stringify({...reprintChoice,size:reprintSize}))}catch{}}
+  function reprintSizes(){return reprintChoice.mode==='single'?[sizeString(document.getElementById('reprintSingleSize')?.value)]:sizesFromSet(selectableSets().find(s=>s.id===reprintChoice.id)||selectableSets()[0])}
+  function updateReprintSummary(){
+    const button=document.getElementById('reprintQueueBtn');if(!button)return;
+    let summary=document.getElementById('llReprintSummary');if(!summary){summary=document.createElement('p');summary.id='llReprintSummary';summary.className='ll-combination-note';summary.setAttribute('role','status');button.before(summary)}
+    const count=enabledIds().length?(reprintSaveJob&&!reprintSaveJob.complete?reprintSaveJob.sizes.length:reprintSizes().length):0;
+    summary.textContent=`${count} ${count===1?'copy':'copies'} will be added to Ready to Print. Your last choice is remembered in this browser.`;
+    if(!reprintSaveJob||reprintSaveJob.complete)button.textContent=`Add ${count} ${count===1?'Copy':'Copies'} to Print`;
+  }
   function renderReprint(){
     const root=document.getElementById('reprint');if(!root)return;root.querySelectorAll('.reprint-choice').forEach(x=>x.style.display='none');
     let wrap=document.getElementById('llReprintSets');const single=document.getElementById('reprintSingleWrap');
     if(!wrap){wrap=document.createElement('div');wrap.id='llReprintSets';single?.before(wrap)}wrap.innerHTML='';
     const sets=selectableSets();if(reprintChoice.mode==='set'&&!sets.some(s=>s.id===reprintChoice.id))reprintChoice.id=sets[0]?.id||null;
-    allSets().forEach(set=>wrap.append(combinationChoice(set,reprintChoice.mode==='set'&&reprintChoice.id===set.id,()=>{reprintChoice={mode:'set',id:set.id};renderReprint();focusChoice('llReprintSets',set.id)})));
-    wrap.append(singleChoice(reprintChoice.mode==='single',()=>{reprintChoice={mode:'single',id:null};renderReprint();focusChoice('llReprintSets',null)}));
+    allSets().forEach(set=>wrap.append(combinationChoice(set,reprintChoice.mode==='set'&&reprintChoice.id===set.id,()=>{reprintChoice={mode:'set',id:set.id};rememberReprint();renderReprint();focusChoice('llReprintSets',set.id)})));
+    wrap.append(singleChoice(reprintChoice.mode==='single',()=>{reprintChoice={mode:'single',id:null};rememberReprint();renderReprint();focusChoice('llReprintSets',null)}));
     if(single){single.classList.toggle('hidden',reprintChoice.mode!=='single');const select=document.getElementById('reprintSingleSize');
-      if(select){const old=select.value;select.innerHTML='';enabledIds().forEach(id=>{const option=document.createElement('option');option.value=id;option.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;select.append(option)});if(enabledIds().includes(old))select.value=old}}
-    window.LittleLabelWorkflowSave.lockReprint();
+      if(select){const old=reprintSize||select.value;select.innerHTML='';enabledIds().forEach(id=>{const option=document.createElement('option');option.value=id;option.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;select.append(option)});if(enabledIds().includes(old))select.value=old;select.onchange=()=>{reprintSize=select.value;rememberReprint();updateReprintSummary()}}}
+    updateReprintSummary();window.LittleLabelWorkflowSave.lockReprint();
   }
 
   async function saveReprint(){
-    const sizes=reprintChoice.mode==='single'?[sizeString(document.getElementById('reprintSingleSize')?.value)]:sizesFromSet(selectableSets().find(s=>s.id===reprintChoice.id)||selectableSets()[0]);
+    const sizes=reprintSizes();
     if(!sizes.length||!enabledIds().length)return alert('Choose an available combination or turn on a size in Settings first.');
     return window.LittleLabelWorkflowSave.reprint(sizes);
   }

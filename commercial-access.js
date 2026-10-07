@@ -7,7 +7,7 @@
   let gateVisible=false,returnFocus=null,lastMode=null;
   const backgroundState=new Map();
   function visible(el){return !!el&&el.isConnected&&!el.closest('.hidden,.lla-hidden,.tl-hidden,.mli-hidden,.hide,[inert]')&&getComputedStyle(el).display!=='none'&&getComputedStyle(el).visibility!=='hidden'}
-  function focusables(){return [...$('llAccessGate').querySelectorAll('button,input,select,textarea,a[href],[tabindex]')].filter(el=>!el.disabled&&el.tabIndex>=0&&visible(el))}
+  function focusables(){return [...$('llAccessGate').querySelectorAll('button,input,select,textarea,a[href],summary,[tabindex]')].filter(el=>!el.disabled&&el.tabIndex>=0&&visible(el))}
   function focusGate(){const first=focusables()[0]||$('llAccessGate');first?.focus({preventScroll:true})}
   function lockBackground(){
     if(!globalThis.document?.body)return;
@@ -19,7 +19,12 @@
   }
   function setGateVisible(show){
     const gate=$('llAccessGate');
-    if(show&&!gateVisible){returnFocus=document.activeElement;gateVisible=true;lockBackground();}
+    if(show&&!gateVisible){
+      // Release the feature panel's background snapshot before taking ownership.
+      // Its focus trap must be inactive before the mandatory gate is shown.
+      window.LittleLabelsFeatureInfo?.close();
+      returnFocus=document.activeElement;window.LittleLabelsDialog?.suspend();gateVisible=true;lockBackground();
+    }
     gate.classList.toggle('lla-hidden',!show);gate.style.pointerEvents=show?'auto':'none';
     if(show){
       lockBackground();
@@ -31,6 +36,7 @@
       const target=accountScreen()?($('passwordRecovery')&&!$('passwordRecovery').classList.contains('hidden')?$('newRecoveryLinkBtn'):$('accountBack')):
         visible(returnFocus)&&returnFocus!==document.body&&!returnFocus.disabled?returnFocus:$('homeGalleryBtn');
       target?.focus({preventScroll:true});returnFocus=null;
+      window.LittleLabelsDialog?.resume();
     }
   }
 
@@ -39,13 +45,18 @@
     if(!gate)return;
     const allowed=active&&activeIdentity===identity();
 
-    for(const [id,name] of [['llaActivatePane','activate'],['llaAccountPane','account'],['llaCheckingPane','checking']]) $(id).classList.toggle('lla-hidden',mode!==name);
-    $('llaManageAccount').classList.toggle('lla-hidden',mode==='account');
+    const checking=mode==='checking'||mode==='loading';
+    for(const [id,name] of [['llaActivatePane','activate'],['llaAccountPane','account']]) $(id).classList.toggle('lla-hidden',mode!==name);
+    $('llaCheckingPane').classList.toggle('lla-hidden',!checking);
+    $('llaCheckingTitle').textContent=mode==='loading'?'Opening Little Labels…':'Checking access…';
+    $('llaCheckingNote').textContent=mode==='loading'?'Please wait while we check your session.':'Please wait while we check this account’s Little Labels purchase.';
+    $('llaManageAccount').classList.toggle('lla-hidden',mode==='account'||mode==='loading');
     $('llaRetryAccess').classList.toggle('lla-hidden',mode!=='activate'||!!activatingIdentity);
-    gate.setAttribute('aria-labelledby',mode==='checking'?'llaCheckingTitle':mode==='account'?'llaAccountTitle':'llaActivateTitle');
+    gate.setAttribute('aria-labelledby',checking?'llaCheckingTitle':mode==='account'?'llaAccountTitle':'llaActivateTitle');
     setGateVisible(!accountScreen()&&!allowed);
     if(gateVisible&&mode!==lastMode)focusGate();
     lastMode=mode;
+    document.dispatchEvent(new CustomEvent('little-label-access-updated',{detail:{active:allowed,mode}}));
   }
   async function rpc(fn,args={}){
     const token=cloudSession?.access_token;
@@ -61,6 +72,9 @@
   function check(){
     const key=identity();
     active=false;
+    if(typeof cloudStartupPending!=='undefined'&&cloudStartupPending){
+      revision++;pending=null;render('loading');return Promise.resolve(false);
+    }
     if(!permanent()){
       revision++;pending=null;render('account');return Promise.resolve(false);
     }
@@ -113,7 +127,7 @@
   function openAccount(){if(typeof show==='function')show('account')}
   function install(){
     const o=document.createElement('div');o.id='llAccessGate';
-    o.innerHTML=`<div class="lla-wrap"><div class="lla-card"><div class="lla-heart">♡</div><div id="llaCheckingPane" class="lla-hidden"><h1 id="llaCheckingTitle">Checking access…</h1><p>Please wait while we check this account’s Little Labels purchase.</p></div><div id="llaActivatePane"><div class="lla-kicker">One-Time Setup</div><h1 id="llaActivateTitle">Activate Little Labels</h1><p>Your purchase includes access for one Little Labels account. Enter the activation code from your Start Here guide.</p><label for="llaCode">Activation code</label><input id="llaCode" aria-describedby="llaStatus" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX"><button id="llaActivate">Activate Little Labels</button><div id="llaStatus" class="lla-status" role="status" aria-live="polite"></div><div class="lla-note">Once activated, just sign into this same account on your phone or computer. You won't need to enter the code again.</div></div><div id="llaAccountPane" class="lla-hidden"><div class="lla-kicker">Almost There</div><h1 id="llaAccountTitle">Sign in to activate</h1><p>Little Labels access belongs to your account, so first create or sign into the account you'll use on your devices.</p><button id="llaAccount">Create or Sign In</button><div class="lla-note">After you're signed in, you'll come right back here to enter your purchase activation code.</div></div><button id="llaRetryAccess" class="lla-hidden">Check access again</button><button id="llaManageAccount" class="lla-hidden">Sign in with another account</button></div></div>`;
+    o.innerHTML=`<div class="lla-wrap"><div class="lla-card"><div class="lla-heart">♡</div><div id="llaCheckingPane" class="lla-hidden"><h1 id="llaCheckingTitle">Checking access…</h1><p id="llaCheckingNote">Please wait while we check this account’s Little Labels purchase.</p></div><div id="llaActivatePane"><div class="lla-kicker">One-Time Setup</div><h1 id="llaActivateTitle">Activate Little Labels</h1><p>Your purchase includes access for one Little Labels account. Enter the activation code from your Start Here guide.</p><label for="llaCode">Activation code</label><input id="llaCode" aria-describedby="llaStatus" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX"><button id="llaActivate">Activate Little Labels</button><div id="llaStatus" class="lla-status" role="status" aria-live="polite"></div><div class="lla-note">Once activated, just sign into this same account on your phone, tablet, or computer. You won't need to enter the code again.</div></div><div id="llaAccountPane" class="lla-hidden"><div class="lla-kicker">Almost There</div><h1 id="llaAccountTitle">Sign in to activate</h1><p>Little Labels access belongs to your account, so first create or sign into the account you'll use on your devices.</p><button id="llaAccount">Create or Sign In</button><div class="lla-note">After you're signed in, you'll come right back here to enter your purchase activation code.</div></div><details class="lla-help"><summary>Activation help</summary><p>1. Create or sign into the Little Labels account you want to use.</p><p>2. Find your activation code in the <strong>Start Here guide</strong> included with your purchase.</p><p>3. Enter the code once, then use the same account on your phone, tablet, or computer.</p><p>If the code has already been used, sign into the account you activated. Check your purchase materials if you need help finding the code.</p></details><button id="llaRetryAccess" class="lla-hidden">Check access again</button><button id="llaManageAccount" class="lla-hidden">Sign in with another account</button></div></div>`;
     o.setAttribute('role','dialog');o.setAttribute('aria-modal','true');o.setAttribute('tabindex','-1');
     document.body.append(o);
     document.addEventListener('keydown',e=>{
@@ -132,8 +146,9 @@
     wasAccountScreen=accountScreen();
     window.LittleLabelsAccess={check,onNavigate,isActive:()=>active&&activeIdentity===identity()};
     document.addEventListener('little-label-auth-updated',check);
+    document.addEventListener('little-label-startup-complete',check);
     document.addEventListener('visibilitychange',()=>{if(!document.hidden)check()});
     window.addEventListener('focus',check);
     check();
   }
-const s=document.createElement('style');s.textContent=`#llAccessGate{position:fixed;inset:0;z-index:30000;background:#FCF8F0;overflow:auto;color:#17375E}.lla-hidden{display:none!important}#llAccessGate :focus-visible{outline:3px solid #17375E!important;outline-offset:4px}.lla-card button:disabled{opacity:.65;cursor:wait}.lla-wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px 16px}.lla-card{width:100%;max-width:430px;background:#FFFDF9;border:1px solid #DDE6EC;border-radius:28px;padding:24px;box-shadow:0 16px 45px rgba(23,55,94,.10);text-align:center}.lla-heart{width:58px;height:58px;border-radius:50%;background:#EEF7FD;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:2rem;color:#D4A23E}.lla-kicker{display:inline-block;background:#EEF7FD;border-radius:999px;padding:6px 10px;font-size:.76rem;letter-spacing:.05em}.lla-card h1{font:500 1.85rem Georgia,serif;margin:10px 0 8px}.lla-card p{color:#4E6175;line-height:1.45}.lla-card label{display:block;text-align:left;margin:18px 0 6px;font-weight:700}.lla-card input{width:100%;padding:14px;border:1px solid #CBD9E4;border-radius:14px;text-align:center;font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;background:#fff;color:#17375E}.lla-card button{width:100%;margin-top:12px;padding:14px;border:0;border-radius:17px;background:#BEDBF0;color:#17375E;font:inherit;font-weight:800}.lla-status{min-height:22px;margin-top:10px;color:#8B4D49;font-size:.88rem}.lla-note{margin-top:16px;padding:12px;border-radius:15px;background:#EEF7FD;color:#4E6175;font-size:.83rem;line-height:1.4}`;document.head.append(s);document.readyState==='loading'?document.addEventListener('DOMContentLoaded',install,{once:true}):install()})();
+const s=document.createElement('style');s.textContent=`#llAccessGate{position:fixed;inset:0;z-index:30000;background:#FCF8F0;overflow:auto;color:#17375E}.lla-hidden{display:none!important}#llAccessGate :focus-visible{outline:3px solid #17375E!important;outline-offset:4px}.lla-card button:disabled{opacity:.65;cursor:wait}.lla-wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px 16px}.lla-card{width:100%;max-width:430px;background:#FFFDF9;border:1px solid #DDE6EC;border-radius:28px;padding:24px;box-shadow:0 16px 45px rgba(23,55,94,.10);text-align:center}.lla-heart{width:58px;height:58px;border-radius:50%;background:#EEF7FD;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:2rem;color:#D4A23E}.lla-kicker{display:inline-block;background:#EEF7FD;border-radius:999px;padding:6px 10px;font-size:.76rem;letter-spacing:.05em}.lla-card h1{font:500 1.85rem Georgia,serif;margin:10px 0 8px}.lla-card p{color:#4E6175;line-height:1.45}.lla-card label{display:block;text-align:left;margin:18px 0 6px;font-weight:700}.lla-card input{width:100%;padding:14px;border:1px solid #CBD9E4;border-radius:14px;text-align:center;font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;background:#fff;color:#17375E}.lla-card button{width:100%;margin-top:12px;padding:14px;border:0;border-radius:17px;background:#BEDBF0;color:#17375E;font:inherit;font-weight:800}.lla-status{min-height:22px;margin-top:10px;color:#8B4D49;font-size:.88rem}.lla-help{text-align:left;border:1px solid #DDE6EC;border-radius:14px;padding:12px;margin-top:16px;background:#FFFDF9}.lla-help summary{font-weight:700;cursor:pointer}.lla-help p{font-size:.83rem}.lla-note{margin-top:16px;padding:12px;border-radius:15px;background:#EEF7FD;color:#4E6175;font-size:.83rem;line-height:1.4}`;document.head.append(s);document.readyState==='loading'?document.addEventListener('DOMContentLoaded',install,{once:true}):install()})();
