@@ -7,7 +7,7 @@ Local draft only, October 6, 2026. Built on production build 116 / commit f34ad5
 - Type a Label accepts English and optional manually entered second-language wording; Review does not call AI and does not require a translated line
 - Typing, single-label review edits and settings changes cannot dispatch translation through either the old base functions or the language patch
 - Manual wording, unfinished draft navigation and English-only save semantics are preserved
-- AI translation has a separate, explicitly priced “AI Translate · Uses 1 Credit” button. One label into one language costs one approved credit. The visible priced button is the user's action consent; there is no redundant confirmation modal
+- Optional tools use a clean “Unlock more features” entry point when unavailable. The synthetic enabled translation control says “Translate”; its pre-use confirmation explicitly discloses AI processing of English wording/selected language and the exact 1-credit cost before even the quote receives the wording. One label into one language remains one approved credit. Declining makes no quote/provider request
 - The action validates a server-shaped quote, captures account/session/draft/input/navigation/save identity, uses a stable UUID, and blocks repeat dispatch while an operation is pending
 - Lost responses, timeout and reload recover/check that same operation rather than starting a new AI call. The recovery journal stores account/operation IDs only, never label text, translations, photos, balances or credentials
 - Late results cannot overwrite manual edits, a newer draft, another account or a captured save. A completed result that no longer matches its original context remains discoverable from either panel, with explicit “Use Recovered Translation” or “Keep My Wording” actions
@@ -17,13 +17,22 @@ Local draft only, October 6, 2026. Built on production build 116 / commit f34ad5
 
 - All four camera/gallery entry points locally prepare the image and immediately open manual Review Label. Choosing, displaying, editing, reviewing, saving and printing never dispatch identification or automatic translation.
 - Original photos remain usable with manually typed English and optional second-language wording. Existing sizes, copies, library, queue and native print rendering are reused.
-- The separate Identify with AI control is disabled with an explanation. It remains off for every account in this candidate, including base-app purchasers: this repository has no verified paid AI entitlement or credit-operation backend for identification.
+- Photo identification remains off for every account, including base-app purchasers, with its availability explained behind Unlock more features. This repository has no verified paid AI entitlement or credit-operation backend for identification.
 - The client identify entry point cannot dispatch the legacy endpoint even if a disabled button is re-enabled. The draft identify-material server now fails closed after existing authentication/base access verification; it never reads/transmits the image, consumes a rate quota or calls a provider. Client-supplied paid/credit claims cannot unlock it.
 - Cancelled file selection preserves the draft. Failed replacement retains the previous photo and wording with a Keep Editing action. Generation/account/navigation checks discard older local image preparation after a new selection, Home, account change or return to manual editing.
 - Photo back/review navigation preserves teacher edits. No identification request exists to time out or overwrite those edits in this checkpoint. Future enabled identification must add and verify paid-operation recovery and stale-result handling before release.
 - No real credits, payment integration, pricing change, migration or provider call was introduced. The old daily usage quota is rate limiting, not paid credits; it has no customer-credit refunds or exactly-once credit settlement. Those backend gaps remain release blockers. Draft server changes also require a separately approved server deployment; shipping only the static page does not update the live endpoint.
 
 Photo regression coverage is included in the aggregate customer-access, account-save and edge-access suites. Browser coverage uses synthetic local images at 390px and 1280px in both Chromium and WebKit, intercepts external I/O, and verifies all four inputs, manual review/back/replacement/save and decoded native print with zero identification or translation requests. See exact-head CI for the execution result; adding a test does not itself establish a browser pass.
+
+## Optional-feature presentation update
+
+- Photo and typed editors show one “Unlock more features” entry point when optional tools are unavailable. Main editors do not display AI headings, per-action credit numbers or balances.
+- The information panel explains AI text/photo processing and promises exact-cost disclosure before purchase/use. It truthfully says purchases and optional tools are not connected, with no fake purchase button. Base app access is separate; manual access is not described as a free app.
+- The modal preserves the draft, locks background focus, traps Tab, closes with Escape/Close/Keep creating, and restores focus. Account changes dismiss it.
+- The synthetic translation path uses a functional Translate label and an explicit confirmation with processing scope, exact cost, settlement/refund and held-outcome terms before sending any wording in a quote. Existing idempotency and stale-result protections remain intact. No live entitlement or billing backend was introduced.
+- Wallet diagnostics remain hidden in the test client, not displayed on editing screens. Any future live balance belongs in account/credits UI.
+- The isolated preview retains all network/privacy boundaries; its main banner uses plain browser-only storage wording. Information disclosures remain in the optional-features panel.
 
 ## Approved commercial policy
 

@@ -90,10 +90,50 @@
     } else throw Error('The AI outcome is not confirmed. Check this same action before trying again.');
     notify();
   }
+  let featureDialog = null, featureReturnFocus = null;
+  const featureBackground = new Map();
+  function closeFeatureInfo() {
+    if (!featureDialog || featureDialog.hidden) return;
+    featureDialog.hidden = true;
+    for (const [el, prior] of featureBackground) { el.inert = prior.inert; if (prior.aria === null) el.removeAttribute('aria-hidden'); else el.setAttribute('aria-hidden', prior.aria); }
+    featureBackground.clear();
+    if (featureReturnFocus?.isConnected && !featureReturnFocus.disabled && !featureReturnFocus.closest('[hidden],.hidden,.tl-hidden,[inert]')) featureReturnFocus.focus({preventScroll:true});
+    featureReturnFocus = null;
+  }
+  function openFeatureInfo() {
+    if (!featureDialog) {
+      featureDialog = document.createElement('div'); featureDialog.id = 'llFeatureInfo'; featureDialog.hidden = true;
+      featureDialog.setAttribute('role','dialog'); featureDialog.setAttribute('aria-modal','true'); featureDialog.setAttribute('aria-labelledby','llFeatureInfoTitle');
+      featureDialog.innerHTML = '<div class="ll-feature-card"><button type="button" class="ll-feature-close" aria-label="Close feature information">×</button><h2 id="llFeatureInfoTitle">Unlock more features</h2><p>Your photos and your own wording are ready to use with your base app access.</p><p>Optional translation and photo identification tools will be available separately. These tools use AI to process the text or photo you choose.</p><p>Before you buy or use a tool, you will see what information is sent and its exact credit cost. Nothing is sent or charged just by opening this panel.</p><p class="ll-feature-availability">Purchases and optional tools are not connected in this build. Keep creating manually; no additional purchase is needed for that.</p><button type="button" class="ll-feature-done">Keep creating</button></div>';
+      document.body.append(featureDialog);
+      for (const button of featureDialog.querySelectorAll('button')) button.addEventListener('click',closeFeatureInfo);
+      featureDialog.addEventListener('click', event => { if (event.target === featureDialog) closeFeatureInfo(); });
+      document.addEventListener('keydown', event => {
+        if (featureDialog.hidden) return;
+        if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); closeFeatureInfo(); return; }
+        if (event.key !== 'Tab') return;
+        const buttons = [...featureDialog.querySelectorAll('button')], first = buttons[0], last = buttons.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      },true);
+      document.addEventListener('focusin', event => { if (!featureDialog.hidden && !featureDialog.contains(event.target)) featureDialog.querySelector('button').focus(); },true);
+    }
+    if (!featureDialog.hidden) return;
+    featureReturnFocus = document.activeElement;
+    for (const el of document.body.children) {
+      if (el === featureDialog || ['SCRIPT','STYLE'].includes(el.tagName)) continue;
+      featureBackground.set(el,{inert:el.inert,aria:el.getAttribute('aria-hidden')}); el.inert = true; el.setAttribute('aria-hidden','true');
+    }
+    featureDialog.hidden = false; featureDialog.querySelector('button').focus({preventScroll:true});
+  }
+  document.addEventListener('little-label-account-changed',()=>{featureReturnFocus=null;closeFeatureInfo();});
+  window.LittleLabelsFeatureInfo = Object.freeze({open:openFeatureInfo,close:closeFeatureInfo});
   function attach({ host, read, apply }) {
     let revision = 0, notice = '', balanceRequest = 0, destroyed = false;
-    host.innerHTML = '<button type="button" class="ll-ai-translate">AI Translate · Uses 1 Credit</button><p class="ll-ai-balance"></p><p class="ll-ai-note" role="status" aria-live="polite"></p><button type="button" class="ll-ai-use" hidden>Use Recovered Translation</button><button type="button" class="ll-ai-dismiss" hidden>Keep My Wording</button>';
+    host.innerHTML = '<button type="button" class="ll-ai-translate">Translate</button><button type="button" class="ll-unlock-features">Unlock more features</button><p class="ll-ai-balance" hidden></p><p class="ll-ai-note" hidden></p><p class="ll-translation-summary" role="status" aria-live="polite"></p><button type="button" class="ll-ai-use" hidden>Use Recovered Translation</button><button type="button" class="ll-ai-dismiss" hidden>Keep My Wording</button>';
     const use = host.querySelector('.ll-ai-use'), dismiss = host.querySelector('.ll-ai-dismiss');
+    const unlock = host.querySelector('.ll-unlock-features'), summary = host.querySelector('.ll-translation-summary');
+    unlock.addEventListener('click',openFeatureInfo);
     const button = host.querySelector('button'), balance = host.querySelector('.ll-ai-balance'), status = host.querySelector('.ll-ai-note');
     function state() { return { ...read(), accountId: owner(), auth: authVersion(), revision }; }
     function identity() { return { accountId: owner(), auth: authVersion() }; }
@@ -113,10 +153,13 @@
       const credits = wallet.get(account);
       use.hidden = dismiss.hidden = !operation?.ready;
       use.disabled = !!now.blocked || !now.visible || operation?.ready?.english !== now.english.trim() || operation?.ready?.language !== now.language;
-      button.hidden = !!operation?.ready;
+      const locked = !api || !account || (!operation && credits?.available === 0);
+      button.hidden = locked || !!operation?.ready || now.language === 'none';
+      unlock.hidden = !locked;
+      summary.hidden = locked || (!notice && !operation && !recoveryError);
       balance.textContent = credits ? `Test balance: ${credits.available} available · ${credits.held} held` : 'Credit balance has not been checked.';
-      host.hidden = now.language === 'none' && !operation;
-      button.textContent = busy.has(account) ? 'Checking AI action…' : operation ? 'Check AI Translation · No New Charge' : 'AI Translate · Uses 1 Credit';
+      host.hidden = false;
+      button.textContent = busy.has(account) ? 'Checking translation…' : operation ? 'Check translation' : 'Translate';
       button.disabled = !!recoveryError || !api || !account || !!now.blocked || busy.has(account)
         || (!operation && (!now.english.trim() || now.language === 'none' || credits?.available === 0));
       if (recoveryError) status.textContent = recoveryError;
@@ -124,8 +167,9 @@
       else if (!account) status.textContent = 'Sign in to use AI credits. Manual wording does not use credits.';
       else if (now.blocked) status.textContent = 'Your save is finishing. Manual wording is preserved; AI can wait.';
       else if (operation) status.textContent = operation.note || 'A translation is pending. Check this action instead of starting another.';
-      else if (credits?.available === 0) status.textContent = 'You have 0 AI credits. Keep creating manually for free; translation uses 1 credit when you choose it.';
+      else if (credits?.available === 0) status.textContent = 'You have 0 AI credits. Keep creating manually with your base app access; translation uses 1 credit when you choose it.';
       else status.textContent = notice || 'Optional AI · 1 label, 1 selected language. You can type the wording yourself at no credit cost.';
+      summary.textContent = recoveryError ? 'The previous translation could not be checked. You can keep typing manually.' : operation?.ready ? 'A translation is ready. Your current wording was kept.' : operation ? 'A translation is pending. Check the existing action before starting another.' : /^Recovered translation added/i.test(notice) ? 'Recovered translation added. Review the wording before saving.' : /^Your wording was kept/i.test(notice) ? 'Your wording was kept.' : /^No usable translation/i.test(notice) ? 'No usable translation was produced. You can type manually or try again.' : /ready/i.test(notice) ? 'Translation ready. Review the wording before saving.' : notice ? 'Translation could not finish. You can keep typing manually.' : '';
     }
     async function refresh() {
       render(); const api = transport(), id = identity(), request = ++balanceRequest, generation = walletGeneration.get(id.accountId) || 0;
@@ -142,6 +186,9 @@
       let operation;
       try { operation = loadPending(account); } catch (error) { message(error.message); render(); return; }
       if (!operation && (!snapshot.english.trim() || snapshot.language === 'none')) return;
+      // Consent precedes even the quote request, which includes the label text.
+      if (!operation && !window.confirm('Translate with AI?\n\nThis sends this label’s English wording and selected language for AI processing. Cost: 1 credit for this label and language.\n\nA usable completed result uses 1 credit, even if you do not save it. An unusable result returns the credit; an uncertain outcome stays held while checked. Continue?')) return;
+      if (!current(snapshot)) return;
       let dispatchStarted = !!operation;
       const claim = {}; busy.set(account, claim); notify();
       try {
@@ -156,7 +203,7 @@
         if (input.english.length > 160) { message('For AI translation, use 160 characters or fewer. Longer manual wording is still available.'); return; }
         const quote = verifyQuote(await bounded(api.quote({ ownerAccountId: account, action: 'translation', labels: [input.english], language: input.language })), account, input);
         if (!current(snapshot)) return; // The user only consented to the original draft.
-        if (quote.available_credits < COST) { message('You have no available AI credits. Keep creating manually for free.'); return; }
+        if (quote.available_credits < COST) { message('You have no available AI credits. Keep creating manually with your base app access.'); return; }
         operation = { accountId: account, operationId: crypto.randomUUID(), input,
           origin: { current: () => current(snapshot), apply: text => { apply(text); revision++; } },
           note: 'Translation is running. Its credit is held while the result is checked.' };
@@ -194,6 +241,7 @@
   document.addEventListener('little-label-account-changed', () => { wallet.clear(); notify(); });
   const style = document.createElement('style');
   style.textContent = '.ll-ai-translate{margin-top:10px!important;background:#EEF7FD!important;color:#17375E!important}.ll-ai-translate:disabled{opacity:.7;cursor:not-allowed}.ll-ai-balance,.ll-ai-note{font-size:.82rem!important;line-height:1.45!important;margin:8px 0!important;color:#61758A!important}';
+  style.textContent += '#llFeatureInfo[hidden]{display:none!important}#llFeatureInfo{position:fixed;inset:0;z-index:50000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(23,55,94,.35);overflow:auto}.ll-feature-card{position:relative;width:100%;max-width:460px;max-height:calc(100dvh - 40px);overflow:auto;padding:26px 22px;background:#FFFDF9;border:1px solid #DDE6EC;border-radius:24px;color:#17375E;box-shadow:0 18px 55px rgba(23,55,94,.2)}.ll-feature-card h2{font:500 1.6rem Georgia,serif;padding-right:30px}.ll-feature-card p{font:15px/1.5 Arial,sans-serif;color:#4E6175}.ll-feature-close{position:absolute;right:12px;top:10px;width:38px!important;padding:4px!important;font-size:24px!important;background:transparent!important;color:#17375E!important}.ll-feature-done,.ll-unlock-features{background:#EEF7FD!important;color:#17375E!important;border:1px solid #D5E5F1!important}.ll-feature-availability{background:#EEF7FD;padding:12px;border-radius:14px}.ll-translation-summary{font-size:.82rem;line-height:1.45;color:#61758A}.ll-ai-balance[hidden],.ll-ai-note[hidden],.ll-ai-translate[hidden],.ll-unlock-features[hidden]{display:none!important}#llFeatureInfo :focus-visible{outline:3px solid #17375E;outline-offset:3px}';
   document.head.append(style);
   window.LittleLabelsTranslationCredits = Object.freeze({ attach });
 })();

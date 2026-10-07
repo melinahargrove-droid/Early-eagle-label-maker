@@ -22,6 +22,18 @@
     translation?.changed();
   }
   function install() {
+    // The everyday editor has one optional-features entry point; processing and
+    // charge disclosures belong inside the information/use confirmation flow.
+    const cleanEditor = document.createElement('style');
+    cleanEditor.textContent = '#photoIdentificationTools{display:none!important}';
+    document.head.append(cleanEditor);
+    const libraryHelp=document.querySelector('#library > .card > p.muted') || document.querySelector('#library p.muted');
+    if(libraryHelp)libraryHelp.textContent='Find saved labels and print them again.';
+    const reprintHelp=document.querySelector('#reprint p.muted');
+    if(reprintHelp)reprintHelp.textContent='Use your saved picture and wording again.';
+    const originalPopulate = window.populateConfirm;
+    populateConfirm = function () { originalPopulate(); document.getElementById('foundNotes').textContent = 'Your photo is ready. Edit your wording before saving.'; };
+
     // Neutralize the base entry points too; legacy event listeners cannot cause a charge.
     autoTranslateEnglish = function () { return; };
     scheduleAutoTranslation = invalidate;
@@ -38,7 +50,7 @@
         language: current().id, draft: singleDraftContext, save: singleSaveJob, navigation: workflowNavigationVersion,
         visible: !document.getElementById('preview').classList.contains('hidden'), blocked: !!singleSaveJob && !singleSaveJob.complete }),
       apply: text => { document.getElementById('spanishInput').value = text; syncLabel(); } });
-    if (!translation) host.textContent = 'AI translation is unavailable. You can keep editing and saving manually.';
+    if (!translation) host.textContent = 'Optional tools are unavailable. You can keep editing and saving manually.';
     window.LittleLabelsSingleTranslation = translation;
     applyUI();
     addEventListener('little-label-settings-changed', () => { invalidate(); applyUI(); syncLabel(); });

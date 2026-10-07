@@ -33,9 +33,10 @@ fs.mkdirSync(out, { recursive: true });
       const page = await browser.newPage({ viewport, serviceWorkers: 'block', acceptDownloads: true });
       page.setDefaultTimeout(20000);
       const errors = [], dialogs = [], externalAI = [], blockedExternal = [], requests = [];
+      let rejectNextTranslation = false;
       const db = new Map(['A', 'B'].map(account => [account, { labels: new Map(), print_queue: new Map() }]));
       page.on('pageerror', error => errors.push(error.message));
-      page.on('dialog', dialog => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+      page.on('dialog', dialog => { dialogs.push(dialog.message()); if(dialog.type()==='confirm' && dialog.message().startsWith('Translate with AI?')) { assert.match(dialog.message(),/Cost: 1 credit/);assert.match(dialog.message(),/English wording.*AI processing/);if(rejectNextTranslation){rejectNextTranslation=false;void dialog.dismiss();}else void dialog.accept(); } else void dialog.dismiss(); });
       const screenshot = name => page.screenshot({ path: path.join(out, `${name}-${viewport.width}.png`), fullPage: true });
       const counts = () => page.evaluate(() => Object.fromEntries(['quote', 'execute', 'status'].map(method => [method, __creditCalls.filter(call => call.method === method).length])));
       async function noOverflow(selector) {
@@ -135,6 +136,11 @@ fs.mkdirSync(out, { recursive: true });
         await page.locator('#previewBack').click();
         assert.equal(await page.locator('#tlSecond').inputValue(), 'Bloques escritos a mano');
 
+        // Declining the disclosed action sends no quote payload and spends nothing.
+        rejectNextTranslation = true;
+        await page.locator('#tlTranslationTools .ll-ai-translate').click();
+        assert.deepEqual(await counts(), { quote: 0, execute: 0, status: 0 });
+
         // Hold the actual explicit action through a double-click and a manual edit.
         await page.evaluate(() => { window.__holdNext = true; window.__releaseCredit = null; });
         await page.locator('#tlTranslationTools .ll-ai-translate').dblclick({ delay: 10 });
@@ -156,7 +162,7 @@ fs.mkdirSync(out, { recursive: true });
         await page.locator('#tlEnglish').fill('Counting Blocks');
         await page.evaluate(() => { window.__loseNext = true; });
         await page.locator('#tlTranslationTools .ll-ai-translate').click();
-        await page.waitForFunction(() => document.querySelector('#tlTranslationTools .ll-ai-translate').textContent.includes('Check AI Translation'));
+        await page.waitForFunction(() => document.querySelector('#tlTranslationTools .ll-ai-translate').textContent.includes('Check translation'));
         await page.locator('#tlTranslationTools .ll-ai-translate').click();
         await page.waitForFunction(() => document.querySelector('#tlTranslationTools .ll-ai-note').textContent.includes('Translation ready'));
         assert.deepEqual(await counts(), { quote: 2, execute: 2, status: 1 });
@@ -283,7 +289,9 @@ fs.mkdirSync(out, { recursive: true });
           await page.locator('#preview').waitFor({ state: 'visible' });
           assert.equal(await page.locator('#englishInput').inputValue(), '');
           assert.equal(await page.locator('#spanishInput').inputValue(), '');
-          assert.equal(await page.locator('#identifyPhotoBtn').isDisabled(), true);
+          assert.equal(await page.locator('#identifyPhotoBtn').isVisible(), false);
+          assert.equal(await page.locator('#singleTranslationTools .ll-unlock-features').isVisible(), true);
+          assert.doesNotMatch(await page.locator('#preview').innerText(), /\bAI\b|\bcredits?\b/i);
           assert.match(await page.locator('#photoAIStatus').textContent(), /paid AI access and credits/);
           await page.locator('#englishInput').fill('Photo blocks');
           await page.locator('#spanishInput').fill('Bloques de la foto');
@@ -322,7 +330,7 @@ fs.mkdirSync(out, { recursive: true });
 
         assert.deepEqual(externalAI, [], 'No unmetered AI endpoint was attempted');
         assert.deepEqual(errors, [], 'No page JavaScript error');
-        assert.deepEqual(dialogs.filter(message => !message.startsWith('Your print-ready PDF was created.')), [], 'No unexpected alert or confirmation');
+        assert.deepEqual(dialogs.filter(message => !message.startsWith('Your print-ready PDF was created.') && !message.startsWith('Translate with AI?')), [], 'No unexpected alert or confirmation');
         fs.writeFileSync(path.join(out, `results-${viewport.width}.json`), JSON.stringify({ engine, viewport, result: 'passed', creditCalls: await page.evaluate(() => __creditCalls), externalAI, blockedExternal, errors, dialogs, requests }, null, 2));
         console.log(`PASS ${engine} ${viewport.width}px manual edits/save/decoded native print, manual photo save/print with disabled AI, no auto AI, double-click/manual-edit protection, lost response, zero credits and account isolation/recovery`);
       } catch (error) {

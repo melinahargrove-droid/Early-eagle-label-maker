@@ -81,9 +81,7 @@
     text('accountStatusText','Isolated test preview');
     text('accountStatusSub','No app account or device sync');
     const banner=document.getElementById('previewStorageStatus');
-    if(banner) {text('previewStorageStatus',problem || 'Photos and saved labels stay in this browser. Clearing its data removes them. Nothing is sent to AI.');banner.setAttribute('role',problem?'alert':'note');}
-    document.querySelectorAll('.ll-ai-balance').forEach(el=>{if(el.textContent!=='AI is disabled in this preview.')el.textContent='AI is disabled in this preview.'});
-    document.querySelectorAll('.ll-ai-note').forEach(el=>{const value='Type the wording yourself. No credits or paid actions are connected here.';if(el.textContent!==value)el.textContent=value});
+    if(banner) {text('previewStorageStatus',problem || 'Photos and saved labels stay in this browser. Clearing its data removes them. Nothing is sent to external services.');banner.setAttribute('role',problem?'alert':'note');}
     const status=document.getElementById('singleSaveStatus');
     if(status?.textContent==='Saved to your account.')status.textContent='Saved only in this browser.';
     const footer=document.querySelector('.footer-note');
@@ -106,7 +104,7 @@
     cloudReady=true;observeCloudSession();
     const sourceShow=show;
     show=function(id){if(['account','passwordRecovery'].includes(id)){alert('Accounts are unavailable in this preview. Labels save only in this browser.');return;}return sourceShow(id)};
-    const notice=document.createElement('aside');notice.id='previewNotice';notice.innerHTML='<strong>Test preview — saved only in this browser</strong><span id="previewStorageStatus"></span><span class="preview-small">Try object photos and fictional names. Accounts, AI, purchases and cloud sync are disabled.</span>';
+    const notice=document.createElement('aside');notice.id='previewNotice';notice.innerHTML='<strong>Test preview — saved only in this browser</strong><span id="previewStorageStatus"></span><span class="preview-small">Try object photos and fictional names. Accounts, purchases and cloud sync are disabled.</span>';
     document.body.prepend(notice);
     new ResizeObserver(()=>document.documentElement.style.setProperty('--preview-banner-height',notice.offsetHeight+'px')).observe(notice);
     new MutationObserver(refresh).observe(document.body,{childList:true,subtree:true,characterData:true});

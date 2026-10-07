@@ -58,7 +58,7 @@ const session=id=>({access_token:'synthetic-'+id,refresh_token:'synthetic-refres
   {
    const {page,model,close}=await fixture({purchased:true});await expect(page.locator('#llAccessGate')).toBeHidden();
    const choose=page.waitForEvent('filechooser');await page.locator('#homeGalleryBtn').click();await (await choose).setFiles({name:'synthetic.png',mimeType:'image/png',buffer:png});
-   await expect(page.locator('#preview')).toBeVisible();await expect(page.locator('#identifyPhotoBtn')).toBeDisabled();await expect(page.locator('#photoAIStatus')).toContainText('paid AI access and credits');
+   await expect(page.locator('#preview')).toBeVisible();await expect(page.locator('#identifyPhotoBtn')).toBeDisabled();await expect(page.locator('#singleTranslationTools .ll-unlock-features')).toBeVisible();await expect(page.locator('#photoIdentificationTools')).toBeHidden();
    await page.locator('#englishInput').fill('My manual photo');await page.locator('#spanishInput').fill('Mi foto');await shot(page,'manual-photo-review');
    await page.locator('#previewBack').click();await page.locator('#editIdentification').click();await expect(page.locator('#englishInput')).toHaveValue('My manual photo');await expect(page.locator('#spanishInput')).toHaveValue('Mi foto');
    assert.equal(model.calls.filter(c=>c.path.includes('/functions/')).length,0);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await close();console.log('PASS Home upload opens usable manual review, preserves edits on Back, never identifies, and fits mobile');

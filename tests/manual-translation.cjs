@@ -46,6 +46,22 @@ const reviewButton=f=>f.$('singleTranslationTools').querySelector('button');
 let count=0;
 async function run(name,fn,options={}){const api=options.creditTransport===false?undefined:options.creditTransport||creditFixture();const f=await fixture({...options,creditTransport:api});try{await fn(f,api);await tick();assert.deepEqual(f.errors,[]);assert.equal(ai(f).length,0,'No legacy AI endpoint was called');console.log('PASS '+name);count++}finally{f.close()}}
 (async()=>{
+ await run('translation confirmation discloses processing and exact cost before any text is sent',async(f,api)=>{
+  f.click('homeTypeBtn');f.input('tlEnglish','Private teacher wording');await tick();
+  let prompt='';f.w.confirm=text=>{prompt=text;assert.equal(api.calls.filter(x=>['quote','execute'].includes(x.method)).length,0);return false};
+  typedButton(f).click();await tick();assert.match(prompt,/Translate with AI/);assert.match(prompt,/English wording.*AI processing/);assert.match(prompt,/Cost: 1 credit/);assert.equal(api.calls.filter(x=>['quote','execute'].includes(x.method)).length,0);
+  f.w.confirm=()=>true;typedButton(f).click();await tick();assert.equal(api.calls.filter(x=>x.method==='execute').length,1);
+ });
+ await run('unlock information has no purchase action, sends no data and restores keyboard focus',async(f)=>{
+  f.click('homeTypeBtn');f.input('tlEnglish','My manual words');const unlock=f.$('tlTranslationTools').querySelector('.ll-unlock-features');assert.equal(unlock.hidden,false);assert.equal(typedButton(f).hidden,true);
+  unlock.focus();unlock.click();const dialog=f.$('llFeatureInfo');assert.equal(dialog.hidden,false);assert.match(dialog.textContent,/tools use AI to process the text or photo/);assert.match(dialog.textContent,/exact credit cost/);assert.match(dialog.textContent,/not connected/);assert.equal(dialog.querySelectorAll('button').length,2);assert.equal(f.w.document.querySelector('.app').inert,true);
+  const buttons=dialog.querySelectorAll('button');buttons[0].focus();f.w.document.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));assert.equal(f.w.document.activeElement,buttons[1]);
+  f.w.document.dispatchEvent(new f.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert.equal(dialog.hidden,true);assert.equal(f.w.document.activeElement,unlock);assert.equal(!!f.w.document.querySelector('.app').inert,false);assert.equal(ai(f).length,0);assert.equal(f.$('tlEnglish').value,'My manual words');
+  unlock.click();buttons[1].click();assert.equal(dialog.hidden,true);assert.equal(f.w.document.activeElement,unlock);
+ },{creditTransport:false});
+ await run('a changed draft during consent cannot start a quote or charge',async(f,api)=>{
+  f.click('homeTypeBtn');f.input('tlEnglish','Before');f.w.confirm=()=>{f.input('tlEnglish','After');return true};typedButton(f).click();await tick();assert.equal(api.calls.filter(x=>['quote','execute'].includes(x.method)).length,0);
+ });
  await run('manual typing, Review, settings and review edits make no AI/credit execute calls',async(f,api)=>{
   f.click('homeTypeBtn');f.input('tlEnglish','Manual blocks');await pause(850);f.click('tlNext');await tick();assert.equal(f.$('preview').classList.contains('hidden'),false);assert.equal(f.$('spanishInput').value,'');
   f.input('englishInput','Edited blocks');f.input('spanishInput','Manual translation');f.w.dispatchEvent(new f.w.CustomEvent('little-label-settings-changed'));await pause(950);
@@ -74,7 +90,7 @@ async function run(name,fn,options={}){const api=options.creditTransport===false
   const delay=deferred(),execute=api.execute.bind(api);api.execute=async body=>{const result=await execute(body);await delay.promise;return result};
   f.click('homeTypeBtn');f.input('tlEnglish','Blocks');typedButton(f).click();await tick();f.click('tlNext');await tick();assert.equal(f.$('preview').classList.contains('hidden'),false);assert.equal(reviewButton(f).disabled,true);
   delay.resolve();await tick();assert.equal(f.$('spanishInput').value,'');assert.match(f.$('singleTranslationTools').textContent,/Recovered translation/);assert.equal(api.calls.filter(x=>x.method==='execute').length,1);
-  f.$('singleTranslationTools').querySelector('.ll-ai-use').click();assert.equal(f.$('spanishInput').value,'Synthetic translated wording');assert.equal(api.calls.filter(x=>x.method==='execute').length,1);
+  f.$('singleTranslationTools').querySelector('.ll-ai-use').click();assert.match(f.$('singleTranslationTools').querySelector('.ll-translation-summary').textContent,/Recovered translation added/);assert.equal(f.$('spanishInput').value,'Synthetic translated wording');assert.equal(api.calls.filter(x=>x.method==='execute').length,1);
  });
  await run('different account cannot receive an old result, balance or draft',async(f,api)=>{
   const delay=deferred(),execute=api.execute.bind(api);api.execute=async body=>{const result=await execute(body);await delay.promise;return result};

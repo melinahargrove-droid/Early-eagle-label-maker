@@ -50,13 +50,13 @@
       grid.insertBefore(button, [...grid.querySelectorAll('.home-action')].find(x => x.textContent.includes('Name Labels')) || null);
     }
     const overlay = document.createElement('div'); overlay.id = 'typeLabelOverlay'; overlay.className = 'tl-hidden';
-    overlay.innerHTML = `<div class="tl-app"><button id="tlBack">← Home</button><div class="tl-card"><div class="tl-kicker">1 · Create</div><h2>Type a Label ♡</h2><p>Type your words, then review the label before saving. Manual wording uses no AI credits.</p><label for="tlEnglish">English wording</label><input id="tlEnglish"><div id="tlSecondWrap"><label id="tlSecondLabel" for="tlSecond">Second-language wording (optional)</label><input id="tlSecond"></div><div id="tlTranslationTools"></div><div id="tlStatus" role="status" aria-live="polite"></div><button id="tlNext">Review Label →</button><p class="tiny">Unfinished wording stays here while you use the app. Save it before closing or reloading.</p></div></div>`;
+    overlay.innerHTML = `<div class="tl-app"><button id="tlBack">← Home</button><div class="tl-card"><div class="tl-kicker">1 · Create</div><h2>Type a Label ♡</h2><p>Type your words, then review the label before saving. Use your own wording.</p><label for="tlEnglish">English wording</label><input id="tlEnglish"><div id="tlSecondWrap"><label id="tlSecondLabel" for="tlSecond">Second-language wording (optional)</label><input id="tlSecond"></div><div id="tlTranslationTools"></div><div id="tlStatus" role="status" aria-live="polite"></div><button id="tlNext">Review Label →</button><p class="tiny">Unfinished wording stays here while you use the app. Save it before closing or reloading.</p></div></div>`;
     document.body.append(overlay);
     translation = window.LittleLabelsTranslationCredits?.attach?.({ host: $('tlTranslationTools'),
       read: () => ({ english: $('tlEnglish').value, second: $('tlSecond').value, language: settings().language,
         draft, navigation: `${navigation}:${workflowNavigationVersion}`, visible: isOpen(), blocked: false }),
       apply: text => { $('tlSecond').value = text; $('tlStatus').textContent = `${languageName()} wording ready. Review it before saving.`; } });
-    if (!translation) $('tlTranslationTools').textContent = 'AI translation is unavailable. You can keep typing and reviewing manually.';
+    if (!translation) $('tlTranslationTools').textContent = 'Optional tools are unavailable. You can keep typing and reviewing manually.';
     $('tlBack').onclick = () => { close(); show('home'); }; $('tlNext').onclick = next;
     $('tlEnglish').addEventListener('input', () => { invalidate(); $('tlStatus').textContent = ''; });
     $('tlSecond').addEventListener('input', () => { invalidate(); $('tlStatus').textContent = $('tlSecond').value.trim() ? `${languageName()} wording ready.` : ''; });
