@@ -62,6 +62,9 @@ async function run(name,fn,options={}){const api=options.creditTransport===false
  await run('a changed draft during consent cannot start a quote or charge',async(f,api)=>{
   f.click('homeTypeBtn');f.input('tlEnglish','Before');f.w.confirm=()=>{f.input('tlEnglish','After');return true};typedButton(f).click();await tick();assert.equal(api.calls.filter(x=>['quote','execute'].includes(x.method)).length,0);
  });
+ await run('using the final credit keeps a clear success message beside the manual wording',async(f,api)=>{
+  f.click('homeTypeBtn');f.input('tlEnglish','Blocks');await tick();typedButton(f).click();await tick();assert.equal(api.credits,0);const summary=f.$('tlTranslationTools').querySelector('.ll-translation-summary');assert.equal(summary.hidden,false);assert.match(summary.textContent,/Translation ready/);assert.equal(f.$('tlTranslationTools').querySelector('.ll-unlock-features').hidden,false);
+ },{creditTransport:creditFixture(1)});
  await run('manual typing, Review, settings and review edits make no AI/credit execute calls',async(f,api)=>{
   f.click('homeTypeBtn');f.input('tlEnglish','Manual blocks');await pause(850);f.click('tlNext');await tick();assert.equal(f.$('preview').classList.contains('hidden'),false);assert.equal(f.$('spanishInput').value,'');
   f.input('englishInput','Edited blocks');f.input('spanishInput','Manual translation');f.w.dispatchEvent(new f.w.CustomEvent('little-label-settings-changed'));await pause(950);

@@ -156,7 +156,7 @@
       const locked = !api || !account || (!operation && credits?.available === 0);
       button.hidden = locked || !!operation?.ready || now.language === 'none';
       unlock.hidden = !locked;
-      summary.hidden = locked || (!notice && !operation && !recoveryError);
+      summary.hidden = !api || !account || (!notice && !operation && !recoveryError);
       balance.textContent = credits ? `Test balance: ${credits.available} available · ${credits.held} held` : 'Credit balance has not been checked.';
       host.hidden = false;
       button.textContent = busy.has(account) ? 'Checking translation…' : operation ? 'Check translation' : 'Translate';
