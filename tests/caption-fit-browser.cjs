@@ -1,5 +1,5 @@
 // Native CI only when local browser launch is denied. Do not weaken its sandbox.
-// Shipped renderer chain, real Canvas/TextMetrics and pixel masks; synthetic
+// Shipped renderer chain, real Canvas/TextMetrics and source-pixel deltas; synthetic
 // photos/captions, no account client, provider, payment or other network calls.
 const {chromium,webkit}=require('@playwright/test');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
@@ -9,9 +9,9 @@ const html=read('index.html'),meta=vm.runInNewContext('('+read('label-settings.j
 const engine=process.env.BROWSER_ENGINE||'chromium',out=path.join(root,'test-results/captions',engine);fs.mkdirSync(out,{recursive:true});
 function saveCapture(prefix,capture){
  if(!capture)return null;
- const {raster,maskRasters,...details}=capture;
+ const {raster,maskRasters,beforeRasters,...details}=capture;
  const png=(name,data)=>{if(data){fs.writeFileSync(path.join(out,name),Buffer.from(data.split(',')[1],'base64'));return name;}return null;};
- return {...details,rasterFile:png(prefix+'.png',raster),maskFiles:(maskRasters||[]).map((data,i)=>png(prefix+`-mask-${i}.png`,data))};
+ return {...details,rasterFile:png(prefix+'.png',raster),maskFiles:(maskRasters||[]).map((data,i)=>png(prefix+`-mask-${i}.png`,data)),beforeCaptionFiles:(beforeRasters||[]).map((data,i)=>png(prefix+`-before-caption-${i}.png`,data))};
 }
 (async()=>{
  const browser=await({chromium,webkit})[engine].launch({headless:true}),failures=[];
@@ -32,32 +32,48 @@ function saveCapture(prefix,capture){
    await page.evaluate(()=>{
     const photo=document.createElement('canvas');photo.width=300;photo.height=200;const p=photo.getContext('2d');p.fillStyle='#fff8eb';p.fillRect(0,0,300,200);p.fillStyle='#629ac0';p.fillRect(50,40,140,120);window.captionPhoto=photo.toDataURL('image/png');
     window.captureCaption=async(item,baseline=false)=>{
-     const native=CanvasRenderingContext2D.prototype.fillText,records=[],masks=new Map();
+     const proto=CanvasRenderingContext2D.prototype,native=proto.fillText,records=[],snapshots=new Map(),afterCaptionArtwork=[];
      const textKeys=['font','textAlign','textBaseline','direction','fontKerning','fontStretch','fontVariantCaps','letterSpacing','wordSpacing','textRendering'];
      const metrics=m=>Object.fromEntries(['width','actualBoundingBoxLeft','actualBoundingBoxRight','actualBoundingBoxAscent','actualBoundingBoxDescent','fontBoundingBoxAscent','fontBoundingBoxDescent','emHeightAscent','emHeightDescent','hangingBaseline','alphabeticBaseline','ideographicBaseline'].filter(key=>Number.isFinite(m[key])).map(key=>[key,m[key]]));
      const state=ctx=>{const t=ctx.getTransform();return {properties:Object.fromEntries([...textKeys,'fillStyle','globalAlpha','globalCompositeOperation','shadowColor','shadowBlur','shadowOffsetX','shadowOffsetY','filter'].filter(key=>key in ctx).map(key=>[key,ctx[key]])),transform:{a:t.a,b:t.b,c:t.c,d:t.d,e:t.e,f:t.f},canvas:{width:ctx.canvas.width,height:ctx.canvas.height,dir:ctx.canvas.dir,lang:ctx.canvas.lang}};};
-     CanvasRenderingContext2D.prototype.fillText=function(text,x,y,...other){
+     // All shipped renderers finish the photo, panel and divider before captions.
+     // Take one source snapshot before the first caption and compare the final
+     // pixels on that SAME canvas. Replaying ctx.font on a different canvas loses
+     // internal fractional precision (CI CJK: source width 952, replay width 986,
+     // both serialized as "bold 28.5px Arial"). Never reconstruct text to test it.
+     // Guard the artwork-before-caption assumption so future renderer changes
+     // cannot silently contaminate this pixel delta with non-caption drawing.
+     const paints=new Map(['drawImage','fill','stroke','fillRect','strokeRect','clearRect','putImageData','strokeText','reset'].filter(key=>typeof proto[key]==='function').map(key=>[key,proto[key]]));
+     for(const [key,method] of paints)proto[key]=function(...args){if(snapshots.has(this.canvas))afterCaptionArtwork.push({method:key,canvasIndex:[...snapshots.keys()].indexOf(this.canvas)});return method.apply(this,args);};
+     proto.fillText=function(text,x,y,...other){
+      if(!snapshots.has(this.canvas))snapshots.set(this.canvas,this.getImageData(0,0,this.canvas.width,this.canvas.height));
       const value=String(text),m=this.measureText(value),record={text:value,x,y,font:this.font,size:Number(this.font.match(/([\d.]+)px/)?.[1]),weight:this.font.startsWith('800')?800:700,direction:this.direction,maxWidth:other[0],left:x-m.actualBoundingBoxLeft,right:x+m.actualBoundingBoxRight,top:y-m.actualBoundingBoxAscent,bottom:y+m.actualBoundingBoxDescent,sourceState:state(this),sourceMetricsBefore:metrics(m)};records.push(record);
-      let mask=masks.get(this.canvas);if(!mask){mask=document.createElement('canvas');mask.width=this.canvas.width;mask.height=this.canvas.height;masks.set(this.canvas,mask);}
-      // Keep the existing mask-copy behavior unchanged while diagnosing it.
-      // Both states/metrics are retained so a font-property setter, fallback font,
-      // transform or drawing-state discrepancy is visible rather than assumed away.
-      const ink=mask.getContext('2d');for(const key of textKeys)if(key in ink)ink[key]=this[key];
-      ink.fillStyle='#000';record.maskState=state(ink);record.maskMetricsBefore=metrics(ink.measureText(value));
-      native.call(ink,text,x,y,...other);const returned=native.call(this,text,x,y,...other);
-      record.maskMetricsAfter=metrics(ink.measureText(value));record.sourceMetricsAfter=metrics(this.measureText(value));return returned;
+      const returned=native.call(this,text,x,y,...other);record.sourceMetricsAfter=metrics(this.measureText(value));return returned;
      };
      let raster=null,captureError=null;
      try{
       raster=await(baseline?LittleLabelsCaptionBaseline:rasterizeFinishedLabel)({...item,photo:captionPhoto});
-     }catch(error){captureError=error.stack||String(error);}finally{CanvasRenderingContext2D.prototype.fillText=native;}
-      const pixelBounds=[],maskRasters=[];for(const mask of masks.values()){
-       const data=mask.getContext('2d').getImageData(0,0,mask.width,mask.height).data;let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity,count=0;
-       for(let y=0;y<mask.height;y++)for(let x=0;x<mask.width;x++)if(data[(y*mask.width+x)*4+3]>8){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);count++;}
-       if(count)pixelBounds.push({left,right,top,bottom,count,width:mask.width,height:mask.height});
-       maskRasters.push(mask.toDataURL('image/png'));
+     }catch(error){captureError=error.stack||String(error);}finally{proto.fillText=native;for(const [key,method] of paints)proto[key]=method;}
+      const pixelBounds=[],maskRasters=[],beforeRasters=[],dimensionChanges=[];
+      for(const [canvas,before] of snapshots){
+       if(canvas.width!==before.width||canvas.height!==before.height){dimensionChanges.push({before:{width:before.width,height:before.height},after:{width:canvas.width,height:canvas.height}});continue;}
+       const ctx=canvas.getContext('2d'),data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+       const mask=document.createElement('canvas');mask.width=canvas.width;mask.height=canvas.height;const ink=mask.getContext('2d'),delta=ink.createImageData(mask.width,mask.height);
+       let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity,count=0;
+       // Scan once per finished canvas, not per line. Count EVERY changed RGBA
+       // pixel, including the faintest anti-aliased edge, with no color filter.
+       for(let y=0;y<canvas.height;y++)for(let x=0;x<canvas.width;x++){
+        const i=(y*canvas.width+x)*4;
+        if(data[i]!==before.data[i]||data[i+1]!==before.data[i+1]||data[i+2]!==before.data[i+2]||data[i+3]!==before.data[i+3]){
+         left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);count++;
+         delta.data[i]=data[i];delta.data[i+1]=data[i+1];delta.data[i+2]=data[i+2];delta.data[i+3]=255;
+        }
+       }
+       if(count)pixelBounds.push({left,right,top,bottom,count,width:canvas.width,height:canvas.height});
+       ink.putImageData(delta,0,0);maskRasters.push(mask.toDataURL('image/png'));
+       ink.putImageData(before,0,0);beforeRasters.push(mask.toDataURL('image/png'));
       }
-      return {raster,records,pixelBounds,maskRasters,captureError};
+      return {raster,records,pixelBounds,maskRasters,beforeRasters,captureError,pixelMethod:'source-canvas-rgba-delta',afterCaptionArtwork,dimensionChanges};
     };
    });
    for(const [id,m] of Object.entries(meta))for(const sample of [...samples,...fallbackSamples]){
@@ -70,6 +86,10 @@ function saveCapture(prefix,capture){
     },{...sample,size:m.name});
     const box=boxes[id],label=`${engine}/${width}/${id}/${sample.name}`;
     assert.equal(result.captureError,null,label+' renderer completed');
+    assert.equal(result.pixelMethod,'source-canvas-rgba-delta');
+    assert.deepEqual(result.afterCaptionArtwork,[],label+' no non-caption drawing after the source snapshot');
+    assert.deepEqual(result.dimensionChanges,[],label+' source canvas dimensions remain fixed');
+    assert.ok(result.pixelBounds.length>0,label+' actual caption changes source pixels');
     for(const [weight,text] of [[800,sample.english],[700,sample.spanish]])assert.equal(compact(result.records.filter(r=>r.weight===weight).map(r=>r.text).join('')),compact(text),label+' retains every source character');
     if(sample.noSegmenter)for(const [weight,text] of [[800,sample.english],[700,sample.spanish]]){
      const drawn=result.records.filter(r=>r.weight===weight&&r.text).map(r=>r.text);
@@ -87,7 +107,7 @@ function saveCapture(prefix,capture){
     const fontPoints=Math.min(...lines.map(r=>r.size))*72/300;
     if(width===390&&['business','cp','3x5-portrait'].includes(id)&&['confirmed-truncation','bilingual-long','arabic','cjk','combining-accents','unbroken-tokens'].includes(sample.name))fs.writeFileSync(path.join(out,`${width}-${id}-${sample.name}.png`),Buffer.from(result.raster.split(',')[1],'base64'));
     if(width===390&&id==='business'&&sample.noSegmenter)fs.writeFileSync(path.join(out,`${width}-${id}-${sample.name}.png`),Buffer.from(result.raster.split(',')[1],'base64'));
-    results.push({format:id,sample:sample.name,passed:true,noSegmenter:!!sample.noSegmenter,fontPoints,records:result.records,pixelBounds:result.pixelBounds});
+    results.push({format:id,sample:sample.name,passed:true,noSegmenter:!!sample.noSegmenter,fontPoints,pixelMethod:result.pixelMethod,records:result.records,pixelBounds:result.pixelBounds});
     }catch(error){
      const failure=fail('caption',id,sample.name,error,{actual:result});
      results.push({format:id,sample:sample.name,passed:false,noSegmenter:!!sample.noSegmenter,artifact:failure.artifact,records:result?.records,pixelBounds:result?.pixelBounds});
@@ -98,6 +118,7 @@ function saveCapture(prefix,capture){
     try{
     result=await page.evaluate(async item=>({before:await captureCaption(item,true),after:await captureCaption(item)}),{...sample,size:m.name});
     assert.equal(result.before.captureError,null);assert.equal(result.after.captureError,null);
+    for(const capture of [result.before,result.after]){assert.deepEqual(capture.afterCaptionArtwork,[]);assert.deepEqual(capture.dimensionChanges,[]);}
     assert.equal(result.after.raster,result.before.raster,`${engine}/${width}/${id}/${sample.name}: every PNG pixel matches the frozen short-caption baseline`);
     parityResults.push({format:id,sample:sample.name,passed:true});
     }catch(error){const failure=fail('parity',id,sample.name,error,result);parityResults.push({format:id,sample:sample.name,passed:false,artifact:failure.artifact});}
