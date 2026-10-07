@@ -1,10 +1,18 @@
-// Frozen print baseline from the physically accepted build 110.
+// Physical print baseline from accepted build 110, with one caption-only amendment:
+// 2026-10-07 CI run 37674109611 reproduced missing trailing photo-caption words.
+// The index renderer and sellable-label-render.js hashes below include its bounded
+// complete-text fallback. All sizes, packing, margins, photo geometry and colors
+// remain frozen. caption-fit-browser.cjs additionally requires exact short-caption
+// PNG equality to the pre-fix renderer fixture and actual glyph/pixel bounds.
+// Previous hashes: index print region 9645eab07b25ba3026c1a89d3a5cf98c5ebb7e650edd3115281e1f7edb2a02df;
+// sellable renderer b6c1dcbf38f447276bc9749470ed1e4bfe8f85c2d3a7ee7ce6c557c190e167cd.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..'),hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const files={
+  "tests/fixtures/caption-print-baseline.js": "765dc5ecf8c5e31a29f01d727e43d213d6b359b758efea4a842a48bdb64149de",
   "pdf-print.js": "71e2cf933d3f588ddc15372a5905e6667110b7d15036a4342e368da09eb4197b",
   "print-blank-fix.js": "ee0b7d69670e88f18126c8f8634e2eb888d08e2703195cf60963eac096ea4fca",
-  "sellable-label-render.js": "b6c1dcbf38f447276bc9749470ed1e4bfe8f85c2d3a7ee7ce6c557c190e167cd",
+  "sellable-label-render.js": "8e60aee0e59fe68a29069256b29eaf3cd13a7a193a07c5ca8e1f3f7c4874fb9f",
   "smart-print-layout.js": "db4da3ef20e9756c2ab26a63fe9d1e2511810314d9439de5d9012c2490c6891b",
   "true-size-rotation-fix.js": "e990784a9587f25b996c2182c4a229fadc405935ec19ed76cd442e80c36e130b",
   "tests/packing.cjs": "3857bfbac33d1fcf4a10f9e446492d53afe775888b74f1f4828736eb22a8b8a1",
@@ -22,7 +30,7 @@ const regions=[
     "file": "index.html",
     "start": "function escapePrintHtml(",
     "end": "async function markCurrentSheetPrinted(",
-    "hash": "9645eab07b25ba3026c1a89d3a5cf98c5ebb7e650edd3115281e1f7edb2a02df"
+    "hash": "463a9a41e1ba7f0a4db4103395dfe2d9c72597052e4f4e327c74af017f0e4cd5"
   },
   {
     "file": "sellable-label-wiring.js",
@@ -41,4 +49,4 @@ for(const {name,hash:expected} of [{"name": "meta", "hash": "cd9001db72eef7789c4
   assert.ok(match,`Missing settings ${name} boundary`);
   assert.equal(hash(match[1]),expected,`Settings ${name} changed from the accepted print baseline`);
 }
-console.log('PASS accepted print baseline: 7 files, 3 inline/layout regions, exact format registry and default combinations');
+console.log('PASS accepted physical print baseline with caption-only amendment: 8 files, 3 inline/layout regions, exact format registry and default combinations');

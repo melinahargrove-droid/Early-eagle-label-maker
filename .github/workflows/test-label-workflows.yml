@@ -66,6 +66,7 @@ jobs:
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Exercise manual-first credit flows with synthetic data
         run: |
+          node tests/caption-fit-browser.cjs
           node tests/audit-browser.cjs
           node tests/manual-translation-browser.cjs
           node tests/owner-ai-browser.cjs
@@ -80,6 +81,13 @@ jobs:
           node tests/private-preview/tests/preview-browser.cjs
         env:
           BROWSER_ENGINE: ${{ matrix.browser }}
+      - name: Upload caption rendering evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captions-${{ matrix.browser }}
+          path: test-results/captions/${{ matrix.browser }}/
+          if-no-files-found: ignore
       - name: Upload audit browser evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -57,14 +57,14 @@
 
   function renderCreateChoices(){
     const sec=document.getElementById('sets');if(!sec)return;sec.querySelectorAll(':scope .choice[data-set]').forEach(x=>x.style.display='none');
-    let wrap=document.getElementById('llDynamicSets');const singleWrap=document.getElementById('singleSizeWrap');
+    let wrap=document.getElementById('llDynamicSets');const focused=wrap?.contains(document.activeElement)?(document.activeElement.dataset.singleChoice?null:document.activeElement.dataset.combinationId):undefined;const singleWrap=document.getElementById('singleSizeWrap');
     if(!wrap){wrap=document.createElement('div');wrap.id='llDynamicSets';singleWrap?.before(wrap)}wrap.innerHTML='';
     const sets=selectableSets();if(chosen.mode==='set'&&!sets.some(s=>s.id===chosen.id))chosen.id=sets[0]?.id||null;
     allSets().forEach(set=>wrap.append(combinationChoice(set,chosen.mode==='set'&&chosen.id===set.id,()=>{chosen={mode:'set',id:set.id};renderCreateChoices();setSummary();focusChoice('llDynamicSets',set.id)})));
     wrap.append(singleChoice(chosen.mode==='single',()=>{chosen={mode:'single',id:null};renderCreateChoices();setSummary();focusChoice('llDynamicSets',null)}));
     if(singleWrap){singleWrap.classList.toggle('hidden',chosen.mode!=='single');const sel=document.getElementById('singleSize');
       if(sel){const old=sel.value;sel.innerHTML='';enabledIds().forEach(id=>{const option=document.createElement('option');option.value=id;option.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;sel.append(option)});if(enabledIds().includes(old))sel.value=old;sel.onchange=setSummary}}
-    const p=sec.querySelector('.card>p.muted');if(p)p.textContent='Choose a saved size-and-copy combination, or make just one label. Unavailable combinations stay here so you can see which sizes to turn on.';setSummary();window.LittleLabelWorkflowSave.lockSingle();
+    const p=sec.querySelector('.card>p.muted');if(p)p.textContent='Choose a saved size-and-copy combination, or make just one label. Unavailable combinations stay here so you can see which sizes to turn on.';setSummary();window.LittleLabelWorkflowSave.lockSingle();if(focused!==undefined)focusChoice('llDynamicSets',focused);
   }
 
   async function saveCurrent(sizes) { return window.LittleLabelWorkflowSave.single(sizes); }
@@ -97,14 +97,14 @@
   }
   function renderReprint(){
     const root=document.getElementById('reprint');if(!root)return;root.querySelectorAll('.reprint-choice').forEach(x=>x.style.display='none');
-    let wrap=document.getElementById('llReprintSets');const single=document.getElementById('reprintSingleWrap');
+    let wrap=document.getElementById('llReprintSets');const focused=wrap?.contains(document.activeElement)?(document.activeElement.dataset.singleChoice?null:document.activeElement.dataset.combinationId):undefined;const single=document.getElementById('reprintSingleWrap');
     if(!wrap){wrap=document.createElement('div');wrap.id='llReprintSets';single?.before(wrap)}wrap.innerHTML='';
     const sets=selectableSets();if(reprintChoice.mode==='set'&&!sets.some(s=>s.id===reprintChoice.id))reprintChoice.id=sets[0]?.id||null;
     allSets().forEach(set=>wrap.append(combinationChoice(set,reprintChoice.mode==='set'&&reprintChoice.id===set.id,()=>{reprintChoice={mode:'set',id:set.id};rememberReprint();renderReprint();focusChoice('llReprintSets',set.id)})));
     wrap.append(singleChoice(reprintChoice.mode==='single',()=>{reprintChoice={mode:'single',id:null};rememberReprint();renderReprint();focusChoice('llReprintSets',null)}));
     if(single){single.classList.toggle('hidden',reprintChoice.mode!=='single');const select=document.getElementById('reprintSingleSize');
       if(select){const old=reprintSize||select.value;select.innerHTML='';enabledIds().forEach(id=>{const option=document.createElement('option');option.value=id;option.textContent=`${meta()[id].name} · ${cleanDims(meta()[id])}`;select.append(option)});if(enabledIds().includes(old))select.value=old;select.onchange=()=>{reprintSize=select.value;rememberReprint();updateReprintSummary()}}}
-    updateReprintSummary();window.LittleLabelWorkflowSave.lockReprint();
+    updateReprintSummary();window.LittleLabelWorkflowSave.lockReprint();if(focused!==undefined)focusChoice('llReprintSets',focused);
   }
 
   async function saveReprint(){

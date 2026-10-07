@@ -71,7 +71,7 @@ const root = path.resolve(__dirname, '..');
  await page.locator('#mockSheets').click();
  await page.locator('#printPreview').waitFor({state:'visible'});
  await page.waitForFunction(()=>document.querySelectorAll('#sheetPreviewPages img').length>0);
- assert.match(await page.locator('#printNowBtn').textContent(),/Open Print PDF/);
+ assert.match(await page.locator('#printNowBtn').textContent(),/Print Labels/);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  console.log('PASS 390px typed Back/review/save/print-preview workflow without horizontal overflow');
  // Controlled cloud adapter verifies bodies/retry/session ownership, without networking.
