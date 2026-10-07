@@ -109,6 +109,6 @@ jobs:
         with:
           deno-version: v2.x
       - name: Type-check owner-guarded functions without running providers
-        run: deno check supabase/functions/*/index.ts
+        run: deno check --node-modules-dir=none supabase/functions/*/index.ts
       - name: Exercise native network adapter with mocked transports and no runtime permissions
         run: deno run tests/product-link-deno-smoke.ts

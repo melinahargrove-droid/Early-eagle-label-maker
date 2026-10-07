@@ -163,14 +163,15 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
       await gate(f.page, 'llaAccountPane');
       assert.equal(f.model.statusCalls.length, 0);
       authDelay.resolve(); await f.ready();
-      await expect.poll(() => f.model.statusCalls.length).toBe(1);
+      // Base activation and owner capability each verify the same identity once.
+      await expect.poll(() => f.model.statusCalls.length).toBe(2);
       await gate(f.page, 'llaCheckingPane');
       await f.page.locator('#llaManageAccount').click();
       await f.page.evaluate(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
       await expect(f.page.locator('#llAccessGate')).toBeHidden();
       await f.page.locator('#accountBack').click();
       await gate(f.page, 'llaCheckingPane');
-      assert.equal(f.model.statusCalls.length, 1, 'duplicate same-identity checks are deduplicated');
+      assert.equal(f.model.statusCalls.length, 2, 'each capability deduplicates its same-identity check');
       statusDelay.resolve({ active: false });
       await gate(f.page, 'llaActivatePane');
       await f.close(); console.log('PASS slow startup and entitlement remain gated, without duplicate requests');
@@ -200,7 +201,7 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
       await f.close(); console.log('PASS late purchased response cannot unlock a different permanent account');
     }
     {
-      const f = await fixture({ user: permanent('synthetic-retry'), status: (_r, n) => n === 1 ? { httpStatus: 503, body: { message: 'Synthetic unavailable' } } : { active: false } }); await f.ready();
+      const f = await fixture({ user: permanent('synthetic-retry'), status: (_r, n) => n <= 2 ? { httpStatus: 503, body: { message: 'Synthetic unavailable' } } : { active: false } }); await f.ready();
       await gate(f.page, 'llaActivatePane');
       await expect(f.page.locator('#llaStatus')).toContainText('Could not verify access');
       await f.page.locator('#llaRetryAccess').click();
@@ -215,7 +216,8 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
       await expect(f.page.locator('#passwordRecovery')).toBeVisible();
       await expect(f.page.locator('#llAccessGate')).toBeHidden();
       await f.page.evaluate(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
-      await expect.poll(() => f.model.statusCalls.length).toBe(1);
+      // Base activation and owner capability each verify the same identity once.
+      await expect.poll(() => f.model.statusCalls.length).toBe(2);
       await expect(f.page.locator('#llAccessGate')).toBeHidden();
       await f.page.locator('#recoveryPassword').fill('synthetic-only-password');
       await f.page.locator('#recoveryPassword2').fill('synthetic-only-password');
