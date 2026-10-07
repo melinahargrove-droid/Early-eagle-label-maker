@@ -31,7 +31,10 @@
     if(recovery)setText(recovery.querySelector('p.muted'),'Choose a new password for your Little Labels account.');
 
     const account=document.getElementById('account');
-    if(account)setText(account.querySelector('.card>p.muted'),'Create an account on your phone first to keep everything you already saved, then sign into that same account on your computer.');
+    if(account)setText(account.querySelector('.card>p.muted'),'Create or sign into your Little Labels account on any device. Use the same account to access your saved labels and Ready to Print copies.');
+
+    const printButton=document.getElementById('printNowBtn');
+    if(printButton){setText(printButton,'Print Labels');const note=printButton.nextElementSibling;if(note?.classList.contains('tiny'))setText(note,'Use Letter paper and 100% / Actual Size in your print dialog. Save as PDF if your browser offers it.');}
 
     const reprint=document.getElementById('reprint');
     if(reprint)setText(reprint.querySelector('p.muted'),'Use your approved saved picture and wording again without recreating the label.');

@@ -22,7 +22,12 @@
       const textTop=divider+Math.round(DPI*.05),textH=y+h-textTop,center=x+w/2;
       let en=fitFont(ctx,item.english,w*.94,Math.round(Math.min(W,H)*.09),32,800);ctx.font=`800 ${en}px Arial, sans-serif`;const enLines=wrap(ctx,item.english,w*.94,2);
       let es=fitFont(ctx,item.spanish,w*.94,Math.round(en*.68),24,700);ctx.font=`700 ${es}px Arial, sans-serif`;const esLines=wrap(ctx,item.spanish,w*.94,2);
-      const lh1=en*1.05,lh2=es*1.05,gap=Math.round(DPI*.025),total=enLines.length*lh1+gap+esLines.length*lh2;let ty=textTop+(textH-total)/2+lh1/2;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#174F83';ctx.font=`800 ${en}px Arial, sans-serif`;for(const line of enLines){ctx.fillText(line,center,ty);ty+=lh1}ty+=gap;ctx.fillStyle='#222';ctx.font=`700 ${es}px Arial, sans-serif`;for(const line of esLines){ctx.fillText(line,center,ty);ty+=lh2}
+      const lh1=en*1.05,lh2=es*1.05,gap=Math.round(DPI*.025),total=enLines.length*lh1+gap+esLines.length*lh2;let ty=textTop+(textH-total)/2+lh1/2;
+      if(drawCompleteCaptionIfNeeded(ctx,item,{x,y:textTop,w,h:textH},[
+        {lines:enLines,size:en,weight:800,color:'#174F83',x:center,y:ty,lineHeight:lh1},
+        {lines:esLines,size:es,weight:700,color:'#222',x:center,y:ty+enLines.length*lh1+gap,lineHeight:lh2}
+      ]))return c.toDataURL('image/png');
+      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#174F83';ctx.font=`800 ${en}px Arial, sans-serif`;for(const line of enLines){ctx.fillText(line,center,ty);ty+=lh1}ty+=gap;ctx.fillStyle='#222';ctx.font=`700 ${es}px Arial, sans-serif`;for(const line of esLines){ctx.fillText(line,center,ty);ty+=lh2}
     }else{
       const imageW=Math.round(w*.53),divider=x+imageW;
       if(img){const scale=Math.min(imageW*.9/img.naturalWidth,h*.88/img.naturalHeight),iw=img.naturalWidth*scale,ih=img.naturalHeight*scale;ctx.drawImage(img,x+(imageW-iw)/2,y+(h-ih)/2,iw,ih)}
@@ -30,7 +35,12 @@
       const tx=divider+Math.round(DPI*.05),tw=x+w-tx,center=tx+tw/2;
       let en=fitFont(ctx,item.english,tw*.94,Math.round(Math.min(W,H)*.085),30,800);ctx.font=`800 ${en}px Arial, sans-serif`;const enLines=wrap(ctx,item.english,tw*.94,2);
       let es=fitFont(ctx,item.spanish,tw*.94,Math.round(en*.68),23,700);ctx.font=`700 ${es}px Arial, sans-serif`;const esLines=wrap(ctx,item.spanish,tw*.94,2);
-      const lh1=en*1.04,lh2=es*1.04,gap=Math.round(DPI*.02),total=enLines.length*lh1+gap+esLines.length*lh2;let ty=y+(h-total)/2+lh1/2;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#174F83';ctx.font=`800 ${en}px Arial, sans-serif`;for(const line of enLines){ctx.fillText(line,center,ty);ty+=lh1}ty+=gap;ctx.fillStyle='#222';ctx.font=`700 ${es}px Arial, sans-serif`;for(const line of esLines){ctx.fillText(line,center,ty);ty+=lh2}
+      const lh1=en*1.04,lh2=es*1.04,gap=Math.round(DPI*.02),total=enLines.length*lh1+gap+esLines.length*lh2;let ty=y+(h-total)/2+lh1/2;
+      if(drawCompleteCaptionIfNeeded(ctx,item,{x:tx,y,w:tw,h},[
+        {lines:enLines,size:en,weight:800,color:'#174F83',x:center,y:ty,lineHeight:lh1},
+        {lines:esLines,size:es,weight:700,color:'#222',x:center,y:ty+enLines.length*lh1+gap,lineHeight:lh2}
+      ]))return c.toDataURL('image/png');
+      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#174F83';ctx.font=`800 ${en}px Arial, sans-serif`;for(const line of enLines){ctx.fillText(line,center,ty);ty+=lh1}ty+=gap;ctx.fillStyle='#222';ctx.font=`700 ${es}px Arial, sans-serif`;for(const line of esLines){ctx.fillText(line,center,ty);ty+=lh2}
     }
     return c.toDataURL('image/png');
   }

@@ -66,7 +66,8 @@ async function run(name,fn){const f=await fixture();try{await fn(f);await tick()
     const f=await fixture({slowStartup:true});
     try{
       assert.equal(f.w.eval('currentUser'),null,'Stored identity stays provisional until refresh verifies it');
-      assert.equal(f.$('llaAccountPane').classList.contains('lla-hidden'),false);
+      assert.equal(f.$('llaCheckingPane').classList.contains('lla-hidden'),false);
+      assert.equal(f.$('llaCheckingTitle').textContent,'Opening Little Labels…');
       let checks=0;const status=deferred(),base=f.w.fetch;
       f.w.fetch=(url,options)=>{if(url.includes('/rpc/little_labels_access_status')){checks++;return status.promise;}return base(url,options);};
       assert.equal(checks,0);

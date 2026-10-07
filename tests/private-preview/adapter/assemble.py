@@ -12,6 +12,9 @@ startup='''(async()=>{
   const handledRecovery = await startRecoveryFromUrl();
   if(!handledRecovery){
     await initCloud();
+  }else{
+    cloudStartupPending=false;
+    document.dispatchEvent(new CustomEvent('little-label-startup-complete'));
   }
 })();'''
 assert html.count(startup)==1, 'Product startup changed; re-review adapter insertion'

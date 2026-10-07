@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eff6ff">
   <title>Little Labels</title>
-  <link rel="manifest" href="manifest.webmanifest?v=117">
+  <link rel="manifest" href="manifest.webmanifest?v=118">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -403,7 +403,7 @@
     <button class="secondary" id="makeListBack">← Home</button>
     <div class="card">
       <h2>Make a List</h2>
-      <p class="muted">Enter one classroom material per line. The app will create bilingual label drafts for all of them at once.</p>
+      <p class="muted">Enter one classroom material per line, then review your wording. Add your own photos or keep text-only labels.</p>
       <label for="makeListInput">One material per line</label>
       <textarea id="makeListInput" placeholder="stickers&#10;googly eyes&#10;magnetic letters&#10;farm animals"></textarea>
       <p class="tiny">You’ll review everything before it is saved or added to Ready to Print.</p>
@@ -547,13 +547,13 @@
     <button class="secondary" id="accountBack">← Home</button>
     <div class="card">
       <h2>Use the Same Labels Everywhere</h2>
-      <p class="muted">Create an account on your phone first to keep everything you've already saved, then sign into that same account on your computer.</p>
+      <p class="muted">Create or sign into your Little Labels account on any device. Use the same account to access your saved labels and Ready to Print copies.</p>
 
       <div id="accountCurrent" class="status ok hidden"></div>
 
       <div id="anonymousAccountPane">
         <h2 style="margin-top:14px">Create My Account</h2>
-        <p class="muted">This converts your current private phone session into a permanent account. Your existing labels stay attached because your Supabase user ID stays the same.</p>
+        <p class="muted">Create your account here to keep the labels from this session. Then sign into that same account on your other devices.</p>
 
         <label for="accountEmail">Email address</label>
         <input id="accountEmail" type="email" autocomplete="email" placeholder="you@example.com">
@@ -624,7 +624,7 @@
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 117</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 118</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -637,6 +637,7 @@ const SUPABASE_URL = "https://ctmqvbsjliinlddfolti.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_AYbs6V2u0qPo-jLTkTFlBQ_1ps7DaZC";
 const SESSION_STORAGE_KEY = "eea_label_maker_supabase_session_v1";
 let cloudReady = false;
+let cloudStartupPending = true;
 let pendingSyncRequests=0,pendingSyncWrites=0,syncErrorVersion=0,syncFailed=false,cloudLoaded=false,cloudLoadedOwner=null,cloudLoadedSessionRevision=-1;
 const failedSyncWrites=new Set();
 let syncOwner=null,syncGeneration=0,syncSessionRevision=-1;
@@ -694,7 +695,7 @@ async function authFetch(path, options={}){
   let data=null;
   try{data=await res.json();}catch{}
   if(!res.ok){
-    const msg=data?.msg || data?.message || data?.error_description || data?.error || `Supabase auth error (${res.status})`;
+    const msg=data?.msg || data?.message || data?.error_description || data?.error || `Sign-in request failed (${res.status})`;
     const error=new Error(msg);error.status=res.status;error.code=data?.code||data?.error_code;throw error;
   }
   return data;
@@ -702,7 +703,7 @@ async function authFetch(path, options={}){
 
 async function userAuthFetch(path,options={}){
   const context=captureCloudContext();
-  if(!cloudSession?.access_token) throw new Error("No signed-in Supabase session is available.");
+  if(!cloudSession?.access_token) throw new Error("Sign in again to continue.");
   const headers={
     "apikey":SUPABASE_PUBLISHABLE_KEY,
     "Authorization":`Bearer ${cloudSession.access_token}`,
@@ -714,7 +715,7 @@ async function userAuthFetch(path,options={}){
   try{data=await res.json();}catch{}
   assertCloudContext(context,false);
   if(!res.ok){
-    const msg=data?.msg || data?.message || data?.error_description || data?.error || `Supabase account error (${res.status})`;
+    const msg=data?.msg || data?.message || data?.error_description || data?.error || `Account request failed (${res.status})`;
     const error=new Error(msg);error.status=res.status;error.code=data?.code||data?.error_code;throw error;
   }
   return data;
@@ -762,7 +763,7 @@ function updateAccountUI(){
     $("accountCurrent").className="status ok";
   }else{
     $("accountStatusText").textContent="Private device session";
-    $("accountStatusSub").textContent="Create an account to sync phone + computer";
+    $("accountStatusSub").textContent="Sign in to access saved labels across devices";
     $("accountBtn").textContent="Sync Devices";
   }
 }
@@ -1086,7 +1087,7 @@ async function restFetch(path,options={},retry=true,context=captureCloudContext(
     for(let attempt=0;attempt<2;attempt++){
       assertCloudContext(context);
       const token=cloudSession?.access_token,refreshToken=cloudSession?.refresh_token;
-      if(!token)throw new Error("No Supabase session is available.");
+      if(!token)throw new Error("Sign in again to continue.");
       const headers={...(options.headers||{}),"apikey":SUPABASE_PUBLISHABLE_KEY,
         "Authorization":`Bearer ${token}`,"Content-Type":"application/json"};
       const res=await fetch(SUPABASE_URL+"/rest/v1/"+path,{...options,headers});
@@ -1100,7 +1101,7 @@ async function restFetch(path,options={},retry=true,context=captureCloudContext(
       let data=null;
       if(res.status!==204){try{data=await res.json();}catch{}}
       assertCloudContext(context);
-      if(!res.ok)throw new Error(data?.message || data?.hint || data?.details || data?.error || `Supabase data error (${res.status})`);
+      if(!res.ok)throw new Error(data?.message || data?.hint || data?.details || data?.error || `Saving request failed (${res.status})`);
       if(writing)failedSyncWrites.delete(writeKey);
       return data;
     }
@@ -1148,6 +1149,9 @@ async function initCloud(){
     updateAccountUI();
     status.className="status error";
     status.textContent="Cloud saving couldn't connect: "+(err?.message||"unknown error")+". The app will still work for this session.";
+  }finally{
+    cloudStartupPending=false;
+    document.dispatchEvent(new CustomEvent('little-label-startup-complete'));
   }
 }
 async function loadCloudData(){
@@ -1293,7 +1297,7 @@ function show(id){
   ['queueSaveNotice','librarySaveNotice'].forEach(key=>$(key)?.classList.add('hidden'));
   if(id==='account'||id==='passwordRecovery'){
     // Dismiss creation/help layers, never the purchase/activation gate.
-    const overlays={mlIsolated:'mli-hidden',nameLabelsOverlay:'hide',typeLabelOverlay:'tl-hidden',llSettings:'lls-hidden',llHelp:'llh-hidden',llAdmin:'lla-hidden'};
+    const overlays={mlIsolated:'mli-hidden',nameLabelsOverlay:'hide',typeLabelOverlay:'tl-hidden',llSettings:'lls-hidden',llHelp:'llh-hidden',llAdmin:'lla-hidden',llLibraryEditor:'hidden'};
     Object.entries(overlays).forEach(([key,hiddenClass])=>document.getElementById(key)?.classList.add(hiddenClass));
     document.getElementById('llWelcome')?.remove();
   }
@@ -1814,6 +1818,94 @@ function wrapTextLines(ctx,text,maxWidth,maxLines=2){
   return lines;
 }
 
+// Preserve the accepted artwork whenever its complete caption already fits.
+// Overflow uses real glyph bounds and complete wrapping, never ellipses, clipping,
+// or discarded words. The same fallback serves every photo/bilingual format.
+function drawCompleteCaptionIfNeeded(ctx,item,box,legacy){
+  const normalized=value=>String(value||'').trim().replace(/\s+/gu,' ');
+  const text=[normalized(item.english),normalized(item.spanish)];
+  const finite=(value,fallback)=>Number.isFinite(value)?value:fallback;
+  ctx.save();
+  try{
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    let lastBottom=-Infinity;
+    const fitsLegacy=legacy.every((group,index)=>{
+      if(normalized(group.lines.join(' '))!==text[index])return false;
+      ctx.font=`${group.weight} ${group.size}px Arial, sans-serif`;
+      return group.lines.every((line,i)=>{
+        if(!line)return true;
+        const m=ctx.measureText(line),cy=group.y+i*group.lineHeight;
+        const top=cy-finite(m.actualBoundingBoxAscent,group.size*.6),bottom=cy+finite(m.actualBoundingBoxDescent,group.size*.6);
+        const separate=top>=lastBottom;lastBottom=bottom;
+        return group.x-finite(m.actualBoundingBoxLeft,m.width/2)>=box.x
+          && group.x+finite(m.actualBoundingBoxRight,m.width/2)<=box.x+box.w
+          && top>=box.y&&bottom<=box.y+box.h&&separate;
+      });
+    });
+    if(fitsLegacy)return false;
+
+    const segmenter=typeof Intl.Segmenter==='function'?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
+    // Without Unicode grapheme segmentation, keep the whole whitespace token.
+    // Smaller type is safer than splitting flags, modifiers, Hangul or ZWJ clusters.
+    const graphemes=value=>segmenter?Array.from(segmenter.segment(value),part=>part.segment):[value];
+    const groups=legacy.map((group,index)=>({...group,text:text[index],words:text[index].split(' ').filter(Boolean).map(graphemes),
+      direction:/^[^\p{Letter}]*[\p{Script=Arabic}\p{Script=Hebrew}]/u.test(text[index])?'rtl':'ltr'})).filter(group=>group.text);
+    // Keep ink off the divider/border while retaining the original text box.
+    const pad=2,area={x:box.x+pad,y:box.y+pad,w:box.w-pad*2,h:box.h-pad*2};
+    function metrics(line,size){
+      const m=ctx.measureText(line),left=finite(m.actualBoundingBoxLeft,0),right=finite(m.actualBoundingBoxRight,m.width);
+      return {text:line,left,right,width:Math.max(m.width,left+right),
+        ascent:Math.max(0,finite(m.actualBoundingBoxAscent,size*.8)),descent:Math.max(0,finite(m.actualBoundingBoxDescent,size*.2))};
+    }
+    function layout(scale){
+      ctx.textAlign='left';ctx.textBaseline='alphabetic';
+      const output=[];
+      for(const group of groups){
+        const size=group.size*scale;if(!(size>0))return null;
+        ctx.font=`${group.weight} ${size}px Arial, sans-serif`;ctx.direction=group.direction;
+        const lines=[];let line='';
+        const fits=value=>metrics(value,size).width<=area.w;
+        for(const word of group.words){
+          const token=word.join(''),joined=line?line+' '+token:token;
+          if(fits(joined)){line=joined;continue;}
+          if(line){lines.push(line);line='';}
+          let offset=0;
+          while(offset<word.length){
+            // Binary search whole graphemes, so accents/Arabic marks/emoji stay intact.
+            let low=1,high=word.length-offset,count=0;
+            while(low<=high){const n=Math.floor((low+high)/2);if(fits(word.slice(offset,offset+n).join(''))){count=n;low=n+1;}else high=n-1;}
+            if(!count)return null;
+            const part=word.slice(offset,offset+count).join('');offset+=count;
+            if(offset<word.length)lines.push(part);else line=part;
+          }
+        }
+        if(line)lines.push(line);
+        const measured=lines.map(value=>{const m=metrics(value,size);return {...m,height:Math.max(size,m.ascent+m.descent)};});
+        const gap=size*.12,height=measured.reduce((sum,m)=>sum+m.height,0)+Math.max(0,measured.length-1)*gap;
+        output.push({...group,size,lines:measured,gap,height});
+      }
+      const groupGap=groups.length>1?Math.min(...output.map(group=>group.size))*.22:0;
+      const height=output.reduce((sum,group)=>sum+group.height,0)+Math.max(0,output.length-1)*groupGap;
+      return height<=area.h?{groups:output,height,groupGap}:null;
+    }
+    let best=layout(1),low=0,high=1;
+    if(!best)for(let i=0;i<26;i++){const scale=(low+high)/2,result=layout(scale);if(result){best=result;low=scale;}else high=scale;}
+    if(!best)throw Error('This caption cannot fit on this label. Shorten the wording or choose a larger label.');
+    let top=area.y+(area.h-best.height)/2;
+    for(const group of best.groups){
+      ctx.font=`${group.weight} ${group.size}px Arial, sans-serif`;ctx.fillStyle=group.color;ctx.direction=group.direction;
+      for(const line of group.lines){
+        // Center the actual ink, including overhangs, rather than only its advance width.
+        const x=area.x+(area.w-(line.left+line.right))/2+line.left;
+        const baseline=top+(line.height-line.ascent-line.descent)/2+line.ascent;
+        ctx.fillText(line.text,x,baseline);top+=line.height+group.gap;
+      }
+      top+=best.groupGap-group.gap;
+    }
+    return true;
+  }finally{ctx.restore();}
+}
+
 async function loadImageForRaster(src){
   if(!src) return null;
   const img=new Image();
@@ -1949,6 +2041,11 @@ async function rasterizeFinishedLabel(item){
     const totalH=enLines.length*enH+esLines.length*esH+gap;
     let ty=contentY+(contentH-totalH)/2+enH/2;
 
+    if(drawCompleteCaptionIfNeeded(ctx,item,{x:textX,y:contentY,w:textW,h:contentH},[
+      {lines:enLines,size:enSize,weight:800,color:'#0e4c88',x:centerX,y:ty,lineHeight:enH},
+      {lines:esLines,size:esSize,weight:700,color:'#171717',x:centerX,y:ty+enLines.length*enH+gap,lineHeight:esH}
+    ]))return canvas.toDataURL('image/png');
+
     ctx.fillStyle="#0e4c88";
     ctx.font=`800 ${enSize}px Arial, sans-serif`;
     for(const line of enLines){
@@ -2062,6 +2159,11 @@ async function rasterizeFinishedLabel(item){
   const esLineH=esSize*1.03;
   const totalH=enLines.length*enLineH+esLines.length*esLineH+lineGap*2;
   let ty=dividerY+(textBlockH-totalH)/2+enLineH/2;
+
+  if(drawCompleteCaptionIfNeeded(ctx,item,{x:contentX,y:dividerY,w:contentW,h:textBlockH},[
+    {lines:enLines,size:enSize,weight:800,color:'#0e4c88',x:W/2,y:ty,lineHeight:enLineH},
+    {lines:esLines,size:esSize,weight:700,color:'#171717',x:W/2,y:ty+enLines.length*enLineH+lineGap,lineHeight:esLineH}
+  ]))return canvas.toDataURL('image/png');
 
   ctx.fillStyle="#0e4c88";
   ctx.font=`800 ${enSize}px Arial, sans-serif`;
@@ -2207,8 +2309,10 @@ function refreshQueue(){
     left.append(name,spanish,size);
     const actions=document.createElement("div"); actions.className="queue-actions";
     const printed=document.createElement("button"); printed.className="secondary"; printed.textContent="Mark printed";
+    printed.setAttribute('aria-label',`Mark ${item.english||'label'} printed`);
     printed.addEventListener("click",()=>markPrinted(item.id));
     const remove=document.createElement("button"); remove.className="secondary danger"; remove.textContent="Remove";
+    remove.setAttribute('aria-label',`Remove ${item.english||'label'} from Ready to Print`);
     remove.addEventListener("click",()=>removeQueueItem(item.id));
     actions.append(printed,remove);
     d.append(left,actions); wrap.appendChild(d);
@@ -2294,14 +2398,20 @@ function refreshLibrary(){
     const button=document.createElement("button");
     button.className="primary";
     button.textContent="Reprint";
+    button.setAttribute('aria-label',`Reprint ${item.english||'label'}`);
     button.addEventListener("click",()=>openReprint(item));
+    const edit=document.createElement('button');
+    edit.className='secondary';edit.textContent='Edit Label';edit.dataset.labelId=item.id;
+    edit.setAttribute('aria-label',`Edit label ${item.english||'label'}`);
+    edit.addEventListener('click',()=>window.LittleLabelsLibraryEditor?.open(item,edit));
 
     const del=document.createElement("button");
     del.className="secondary danger";
     del.textContent="Delete";
+    del.setAttribute('aria-label',`Delete saved label ${item.english||'label'}`);
     del.addEventListener("click",()=>deleteLibraryLabel(item));
 
-    actions.append(button,del);
+    actions.append(edit,button,del);
     d.append(left,actions);
     wrap.appendChild(d);
   });
@@ -2352,7 +2462,7 @@ function openDedicatedBatch(mode){
     $("batchDescription").textContent="Paste a product page link and the app will create a label draft using the real product title and image when available.";
   }else{
     $("batchTitle").textContent="Make a List";
-    $("batchDescription").textContent="Enter one material per line and create multiple bilingual label drafts at once.";
+    $("batchDescription").textContent="Enter one material per line, then review each label. Second-language wording is optional.";
   }
   $("batchProgress").classList.add("hidden");
   show("batch");
@@ -3012,42 +3122,46 @@ updateSetSummary();
   const handledRecovery = await startRecoveryFromUrl();
   if(!handledRecovery){
     await initCloud();
+  }else{
+    cloudStartupPending=false;
+    document.dispatchEvent(new CustomEvent('little-label-startup-complete'));
   }
 })();
 
 </script>
 
 <!-- LITTLE_LABELS_DIRECT_PATCHES_START -->
-<script src="./ai-client.js?v=117"></script>
-<script src="./commercial-access.js?v=117"></script>
-<script src="./translation-credit-controls.js?v=117"></script>
-<script src="./little-labels-admin.js?v=117"></script>
-<script src="./v1-audit-polish.js?v=117"></script>
-<script src="./home-grid-order.js?v=117"></script>
-<script src="./onboarding-help.js?v=117"></script>
-<script src="./label-workflow-save.js?v=117"></script>
-<script src="./make-list-isolated.js?v=117"></script>
-<script src="./make-list-polish.js?v=117"></script>
-<script src="./smart-print-layout.js?v=117"></script>
-<script src="./name-labels.js?v=117"></script>
-<script src="./name-labels-queue.js?v=117"></script>
-<script src="./queue-library-polish.js?v=117"></script>
-<script src="./little-labels-theme.js?v=117"></script>
-<script src="./label-settings.js?v=117"></script>
-<script src="./language-settings.js?v=117"></script>
-<script src="./identification-language.js?v=117"></script>
-<script src="./confirmation-cleanup.js?v=117"></script>
-<script src="./type-a-label.js?v=117"></script>
-<script src="./blank-input-placeholders.js?v=117"></script>
-<script src="./sellable-label-wiring.js?v=117"></script>
-<script src="./sellable-label-render.js?v=117"></script>
-<script src="./name-only-render.js?v=117"></script>
-<script src="./true-size-rotation-fix.js?v=117"></script>
-<script src="./background-cleanup-toggle.js?v=117"></script>
-<script src="./home-settings-gear.js?v=117"></script>
-<script src="./print-blank-fix.js?v=117"></script>
-<script src="./pdf-print.js?v=117"></script>
-<script src="./pwa-version-fix.js?v=117"></script>
+<script src="./ai-client.js?v=118"></script>
+<script src="./commercial-access.js?v=118"></script>
+<script src="./translation-credit-controls.js?v=118"></script>
+<script src="./little-labels-admin.js?v=118"></script>
+<script src="./v1-audit-polish.js?v=118"></script>
+<script src="./home-grid-order.js?v=118"></script>
+<script src="./onboarding-help.js?v=118"></script>
+<script src="./label-workflow-save.js?v=118"></script>
+<script src="./make-list-isolated.js?v=118"></script>
+<script src="./make-list-polish.js?v=118"></script>
+<script src="./smart-print-layout.js?v=118"></script>
+<script src="./name-labels.js?v=118"></script>
+<script src="./name-labels-queue.js?v=118"></script>
+<script src="./queue-library-polish.js?v=118"></script>
+<script src="./library-label-editor.js?v=118"></script>
+<script src="./little-labels-theme.js?v=118"></script>
+<script src="./label-settings.js?v=118"></script>
+<script src="./language-settings.js?v=118"></script>
+<script src="./identification-language.js?v=118"></script>
+<script src="./confirmation-cleanup.js?v=118"></script>
+<script src="./type-a-label.js?v=118"></script>
+<script src="./blank-input-placeholders.js?v=118"></script>
+<script src="./sellable-label-wiring.js?v=118"></script>
+<script src="./sellable-label-render.js?v=118"></script>
+<script src="./name-only-render.js?v=118"></script>
+<script src="./true-size-rotation-fix.js?v=118"></script>
+<script src="./background-cleanup-toggle.js?v=118"></script>
+<script src="./home-settings-gear.js?v=118"></script>
+<script src="./print-blank-fix.js?v=118"></script>
+<script src="./pdf-print.js?v=118"></script>
+<script src="./pwa-version-fix.js?v=118"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>
