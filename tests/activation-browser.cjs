@@ -240,10 +240,14 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
       await f.page.locator('#llaActivate').click();
       await expect.poll(() => f.model.activationCalls.length).toBe(2);
       await expect(f.page.locator('#llaActivate')).toBeDisabled();
-      const checks = f.model.statusCalls.length;
+      const checks = f.model.statusCalls.length, ownerChecks = f.model.adminStatusCalls.length;
       await f.page.evaluate(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
       await f.page.locator('#llaCode').press('Enter');
-      assert.equal(f.model.statusCalls.length, checks, 'focus while activating cannot supersede the activation response');
+      // Focus refreshes the independent owner capability, but must not restart
+      // the base activation check or replace its pending result.
+      await expect.poll(() => f.model.adminStatusCalls.length).toBe(ownerChecks + 1);
+      assert.equal(f.model.statusCalls.length, checks + 1, 'only the owner capability refreshes while activation is pending');
+      await expect(f.page.locator('#llaActivate')).toBeDisabled();
       assert.equal(f.model.activationCalls.length, 2, 'disabled activation cannot be resubmitted with Enter');
       activationDelay.resolve({ success: true });
       await expect(f.page.locator('#llAccessGate')).toBeHidden();
