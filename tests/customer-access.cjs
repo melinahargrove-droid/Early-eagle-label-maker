@@ -66,7 +66,7 @@ const recovery='#type=recovery&access_token=synthetic-A&refresh_token=synthetic-
  for(const inputId of ['homeGalleryInput','homeCameraInput','galleryInput','cameraInput'])await run(inputId+' opens manual review with zero AI calls',async f=>{
   const file=new f.w.File(['synthetic'],'photo.png',{type:'image/png'});Object.defineProperty(f.$(inputId),'files',{value:[file]});f.$(inputId).dispatchEvent(new f.w.Event('change'));await tick();await tick();
   assert.equal(f.$('preview').classList.contains('hidden'),false);assert.equal(f.$('englishInput').value,'');assert.equal(f.$('spanishInput').value,'');assert.ok(f.$('labelPhoto').src.startsWith('data:image/'));
-  assert.equal(f.$('identifyPhotoBtn').disabled,true);assert.match(f.$('photoAIStatus').textContent,/paid AI access and credits/);
+  assert.equal(f.$('identifyPhotoBtn').disabled,true);assert.equal(f.$('photoIdentificationTools').classList.contains('hidden'),true);assert.equal(f.$('singleTranslationTools').querySelector('.ll-unlock-features').hidden,false);
   assert.equal(f.calls.filter(r=>r.url.includes('/functions/')).length,0);
   f.input('englishInput','Manual blocks');f.input('spanishInput','Teacher wording');f.click('previewBack');f.click('editIdentification');
   assert.equal(f.$('englishInput').value,'Manual blocks');assert.equal(f.$('spanishInput').value,'Teacher wording');await f.w.identify();f.click('identifyPhotoBtn');

@@ -129,7 +129,7 @@
   document.addEventListener('little-label-account-changed',()=>{featureReturnFocus=null;closeFeatureInfo();});
   window.LittleLabelsFeatureInfo = Object.freeze({open:openFeatureInfo,close:closeFeatureInfo});
   function attach({ host, read, apply }) {
-    let revision = 0, notice = '', balanceRequest = 0, destroyed = false;
+    let revision = 0, notice = '', balanceRequest = 0, destroyed = false, ownerController = null;
     host.innerHTML = '<button type="button" class="ll-ai-translate">Translate</button><button type="button" class="ll-unlock-features">Unlock more features</button><p class="ll-ai-balance" hidden></p><p class="ll-ai-note" hidden></p><p class="ll-translation-summary" role="status" aria-live="polite"></p><button type="button" class="ll-ai-use" hidden>Use Recovered Translation</button><button type="button" class="ll-ai-dismiss" hidden>Keep My Wording</button>';
     const use = host.querySelector('.ll-ai-use'), dismiss = host.querySelector('.ll-ai-dismiss');
     const unlock = host.querySelector('.ll-unlock-features'), summary = host.querySelector('.ll-translation-summary');
@@ -147,22 +147,24 @@
     function message(text) { notice = text; status.textContent = text; }
     function render() {
       if (destroyed) return;
-      const now = state(), api = transport(), account = now.accountId;
+      void Promise.resolve().then(()=>globalThis.LittleLabelsOwnerAI?.check());
+      const now = state(), api = transport(), account = now.accountId, ownerAccess = globalThis.LittleLabelsOwnerAI?.isOwner() === true;
       let operation = null, recoveryError = '';
       try { operation = loadPending(account); } catch (error) { recoveryError = error.message; }
       const credits = wallet.get(account);
       use.hidden = dismiss.hidden = !operation?.ready;
       use.disabled = !!now.blocked || !now.visible || operation?.ready?.english !== now.english.trim() || operation?.ready?.language !== now.language;
-      const locked = !api || !account || (!operation && credits?.available === 0);
+      const locked = !ownerAccess && (!api || !account || (!operation && credits?.available === 0));
       button.hidden = locked || !!operation?.ready || now.language === 'none';
       unlock.hidden = !locked;
-      summary.hidden = !api || !account || (!notice && !operation && !recoveryError);
+      summary.hidden = (!api && !ownerAccess) || !account || (!notice && !operation && !recoveryError);
       balance.textContent = credits ? `Test balance: ${credits.available} available · ${credits.held} held` : 'Credit balance has not been checked.';
       host.hidden = false;
       button.textContent = busy.has(account) ? 'Checking translation…' : operation ? 'Check translation' : 'Translate';
-      button.disabled = !!recoveryError || !api || !account || !!now.blocked || busy.has(account)
-        || (!operation && (!now.english.trim() || now.language === 'none' || credits?.available === 0));
-      if (recoveryError) status.textContent = recoveryError;
+      button.disabled = (!ownerAccess && !!recoveryError) || (!api && !ownerAccess) || !account || !!now.blocked || busy.has(account)
+        || (!operation && (!now.english.trim() || now.language === 'none' || (!ownerAccess && credits?.available === 0)));
+      if (ownerAccess) status.textContent = notice || 'Owner access is available. Customer credits are not used.';
+      else if (recoveryError) status.textContent = recoveryError;
       else if (!api) status.textContent = 'AI credits are not connected in this local test build. You can always type your second-language wording yourself.';
       else if (!account) status.textContent = 'Sign in to use AI credits. Manual wording does not use credits.';
       else if (now.blocked) status.textContent = 'Your save is finishing. Manual wording is preserved; AI can wait.';
@@ -180,7 +182,25 @@
         readWallet(value, id.accountId); render();
       } catch { if (sameIdentity(id) && request === balanceRequest) { message('Credit balance is unavailable. You can keep typing manually.'); render(); } }
     }
+    async function runOwner() {
+      const snapshot=state(), account=snapshot.accountId;
+      if (!snapshot.visible || snapshot.blocked || !account || busy.has(account) || !snapshot.english.trim() || !LANGUAGES.includes(snapshot.language)) return;
+      const claim={},controller=new AbortController();ownerController=controller;const timer=setTimeout(()=>controller.abort(),45000);busy.set(account,claim);notify();
+      try {
+        if (!(await globalThis.LittleLabelsOwnerAI.authorize('Translate this label? The English wording and selected language will be sent for AI processing.',()=>current(snapshot)))) return;
+        const response=await littleLabelsAIFetch(`${SUPABASE_URL}/functions/v1/translate-label`,{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({english:snapshot.english.trim(),target_language:snapshot.language}),signal:controller.signal,isCurrent:()=>current(snapshot)});
+        const value=await response.json();
+        if (!current(snapshot)) return;
+        const translated=value?.translation ?? (snapshot.language==='es'?value?.spanish:'');
+        if (!response.ok || value?.success!==true || typeof translated!=='string' || !translated.trim() || translated.length>640 || (value.language && value.language!==snapshot.language)) throw Error('Translation unavailable');
+        apply(translated.trim());revision++;message('Translation ready. Review the wording before saving.');
+      } catch {
+        if (current(snapshot)) message('The request could not finish. Keep typing manually; choosing Translate again starts a new provider request.');
+      } finally {clearTimeout(timer);if(ownerController===controller)ownerController=null;if(busy.get(account)===claim)busy.delete(account);notify();}
+    }
     async function run() {
+      if(globalThis.LittleLabelsOwnerAI?.isOwner())return runOwner();
       const api = transport(), snapshot = state(), id = identity(), account = id.accountId;
       if (!api || !account || snapshot.blocked || !snapshot.visible || busy.has(account)) return;
       let operation;
@@ -222,8 +242,8 @@
         }
       } finally { if (busy.get(account) === claim) busy.delete(account); notify(); }
     }
-    const binding = { render, refresh, sameIdentity, message, changed() { revision++; notice = ''; render(); },
-      destroy() { destroyed = true; revision++; balanceRequest++; bindings.delete(binding); } };
+    const binding = { render, refresh, sameIdentity, message, changed() { revision++; ownerController?.abort(); notice = ''; render(); },
+      destroy() { destroyed = true; revision++; ownerController?.abort(); balanceRequest++; bindings.delete(binding); } };
     use.addEventListener('click', () => {
       const now = state(); let operation; try { operation = loadPending(now.accountId); } catch { return; }
       if (!operation?.ready || now.blocked || !now.visible || now.english.trim() !== operation.ready.english || now.language !== operation.ready.language) return;
@@ -237,6 +257,7 @@
     button.addEventListener('click', run); bindings.add(binding); render();
     return binding;
   }
+  globalThis.addEventListener('little-label-owner-ai-updated',notify);
   document.addEventListener('little-label-auth-updated', notify);
   document.addEventListener('little-label-account-changed', () => { wallet.clear(); notify(); });
   const style = document.createElement('style');

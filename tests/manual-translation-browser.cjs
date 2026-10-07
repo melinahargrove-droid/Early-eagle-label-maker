@@ -292,7 +292,7 @@ fs.mkdirSync(out, { recursive: true });
           assert.equal(await page.locator('#identifyPhotoBtn').isVisible(), false);
           assert.equal(await page.locator('#singleTranslationTools .ll-unlock-features').isVisible(), true);
           assert.doesNotMatch(await page.locator('#preview').innerText(), /\bAI\b|\bcredits?\b/i);
-          assert.match(await page.locator('#photoAIStatus').textContent(), /paid AI access and credits/);
+          assert.equal(await page.locator('#photoIdentificationTools').isVisible(),false);
           await page.locator('#englishInput').fill('Photo blocks');
           await page.locator('#spanishInput').fill('Bloques de la foto');
           await page.locator('#previewBack').click();

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eff6ff">
   <title>Little Labels</title>
-  <link rel="manifest" href="manifest.webmanifest?v=108">
+  <link rel="manifest" href="manifest.webmanifest?v=117">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -356,9 +356,8 @@
       <input id="spanishInput" autocomplete="off">
       <div id="translationStatus" class="tiny" style="margin-top:6px"></div>
       <div id="photoIdentificationTools" class="hidden">
-        <p class="tiny">Type your label below. Choosing a photo and writing your own words uses no AI credits.</p>
-        <button id="identifyPhotoBtn" class="secondary" disabled aria-describedby="photoAIStatus">Identify with AI</button>
-        <p id="photoAIStatus" class="tiny" role="status">AI identification is unavailable until paid AI access and credits can be verified. You can still type, save, and print this photo label.</p>
+        <button id="identifyPhotoBtn" class="secondary" disabled aria-describedby="photoAIStatus">Identify photo</button>
+        <p id="photoAIStatus" class="tiny" role="status"></p>
       </div>
 
       <button id="chooseSetBtn" class="primary" style="margin-top:14px">Review Sizes & Copies →</button>
@@ -625,7 +624,7 @@
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 116</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 117</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -1285,7 +1284,8 @@ function showWorkflowSaveNotice(destination, copies, cloud) {
 
 
 function show(id){
-  cancelPhotoWork();
+  cancelPhotoWork();cancelCleanupWork();
+  document.dispatchEvent(new CustomEvent('little-label-navigation'));
   if(id!=='account')cancelPasswordRequest();
   if(id!=='passwordRecovery'&&(recoveryContext||recoveryController||recoveryBusy)){recoveryOperation++;recoveryController?.abort();recoveryController=null;recoveryContext=null;recoveryBusy=false;clearSensitiveAuthFields();recoveryFieldsEnabled(false);}
   workflowNavigationVersion++;
@@ -1330,7 +1330,8 @@ function setStatus(text, cls){
   el.classList.remove("hidden");
   if(cls==='error'&&!$("capture").classList.contains("hidden"))el.scrollIntoView?.({block:'center',behavior:'smooth'});
 }
-let photoWork=null,photoWorkRevision=0;
+let photoWork=null,photoWorkRevision=0,cleanupWorkRevision=0,cleanupRefinementRevision=0;
+function cancelCleanupWork(){cleanupWorkRevision++;cleanupRefinementRevision++;}
 function cancelPhotoWork(){
   photoWorkRevision++;photoWork?.controller.abort();photoWork=null;
   if($('retryIdentify')){$('retryIdentify').disabled=true;$('retryIdentify').textContent='Identify with AI';}
@@ -1345,7 +1346,7 @@ function assertPhotoWork(work){
 async function handlePhoto(file){
   // A dismissed file picker leaves the current draft untouched.
   if(!file)return;
-  show('capture');
+  cancelCleanupWork();show('capture');
   // Keep the prior label until the replacement decodes successfully.
   if(!singleDraftContext)beginSingleDraft();
   const work=newPhotoWork();
@@ -1367,7 +1368,7 @@ async function handlePhoto(file){
     populateConfirm();syncLabel();
     // Image preparation is local. No identification, translation, or cleanup is started.
     setStatus('Photo ready. Type your label wording.','ok');
-    photoWork=null;show('preview');$('englishInput').focus();
+    photoWork=null;show('preview');syncLabel();$('englishInput').focus();
   }catch(error){
     if(photoWork!==work||error.code==='SESSION_CHANGED'||error.code==='STALE_PHOTO')return;
     setStatus("Couldn't read that photo. Choose a different picture and try again.",'error');
@@ -1477,12 +1478,13 @@ async function applyCleanupMode(mode){
   cleanupMode=mode;
   setCleanupStatus(`Refining ${mode} cleanup…`,"loading");
 
-  const context=singleDraftContext;
+  const context=singleDraftContext,revision=cleanupWorkRevision,refinement=++cleanupRefinementRevision,source=rawRemovedPhotoDataUrl;
   try{
     if(!context)return;
     assertSingleDraft(context);
-    const cleaned=await refineRemovedBackground(rawRemovedPhotoDataUrl,mode);
+    const cleaned=await refineRemovedBackground(source,mode);
     assertSingleDraft(context);
+    if(revision!==cleanupWorkRevision||refinement!==cleanupRefinementRevision||source!==rawRemovedPhotoDataUrl)return;
     cleanedPhotoDataUrl=cleaned;
     activePhotoDataUrl=cleanedPhotoDataUrl;
     $("confirmPhoto").src=cleanedPhotoDataUrl;
@@ -1513,21 +1515,23 @@ async function cleanBackground(){
   $("photoChoiceRow").classList.add("hidden");
   $("retryCleanupBtn").classList.add("hidden");
   setCleanupStatus("✨ Removing the background… The first time on this phone may take a little longer.","loading");
-  const context=singleDraftContext;
+  const context=singleDraftContext,source=photoDataUrl,revision=++cleanupWorkRevision;
+  const current=()=>{try{assertSingleDraft(context);return cleanupWorkRevision===revision&&photoDataUrl===source}catch{return false}};
   try{
     if(!context)return;
-    assertSingleDraft(context);
+    if(!(await window.LittleLabelsOwnerAI?.authorize('Remove this photo background locally?',current,true)))return false;
+    if(!current())return;
     const removeBackground = await getBackgroundRemover();
-    assertSingleDraft(context);
+    if(!current())return;
     if(!removeBackground){
       throw new Error("Background-removal library could not load on this device.");
     }
-    const blob = await removeBackground(photoDataUrl,{
+    const blob = await removeBackground(source,{
       model:"small",
       device:"cpu",
       output:{format:"image/png",quality:1},
       progress:(key,current,total)=>{
-        if(singleDraftContext===context && context.revision===cloudSessionRevision && total>0){
+        if(current() && total>0){
           const pct=Math.max(1,Math.min(100,Math.round((current/total)*100)));
           if(String(key).startsWith("fetch:")){
             setCleanupStatus(`✨ Loading background cleaner… ${pct}%`,"loading");
@@ -1537,9 +1541,9 @@ async function cleanBackground(){
         }
       }
     });
-    assertSingleDraft(context);
+    if(!current())return;
     const removed=await blobToDataUrl(blob);
-    assertSingleDraft(context);
+    if(!current())return;
     rawRemovedPhotoDataUrl=removed;
     cleanupSucceeded=true;
     $("cleanupStrengthWrap").classList.remove("hidden");
@@ -1547,7 +1551,7 @@ async function cleanBackground(){
     await applyCleanupMode("normal");
     return true;
   }catch(err){
-    if(err.code==='SESSION_CHANGED')return;
+    if(!current())return;
     console.error("Background cleanup error:",err);
     rawRemovedPhotoDataUrl="";
     cleanedPhotoDataUrl="";
@@ -1564,11 +1568,27 @@ async function cleanBackground(){
   }
 }
 async function identify(){
-  // Base-app activation and a daily rate quota are not paid AI entitlement.
-  // Fail closed until a server-verified credit operation is available. Do not
-  // restore the legacy unmetered endpoint as a fallback, even on an explicit click.
-  $('photoAIStatus').textContent='AI identification is unavailable until paid AI access and credits can be verified. You can still type, save, and print this photo label.';
-  return false;
+  if(currentCreationSource!=='photo'||!photoDataUrl||photoWork)return;
+  const work=newPhotoWork(),image=photoDataUrl,english=$('englishInput').value,second=$('spanishInput').value;
+  const language=window.LittleLabelSettings?.get?.().language||'es';
+  const current=()=>{try{assertPhotoWork(work);return currentCreationSource==='photo'&&photoDataUrl===image&&$('englishInput').value===english&&$('spanishInput').value===second&&(window.LittleLabelSettings?.get?.().language||'es')===language;}catch{return false;}};
+  $('identifyPhotoBtn').disabled=true;
+  let timer;
+  try{
+    if(!(await window.LittleLabelsOwnerAI?.authorize('Identify this photo? The selected photo and language will be sent for AI processing.',current)))return;
+    if(!current())return;
+    $('photoAIStatus').textContent='Finding label wording…';
+    timer=setTimeout(()=>work.controller.abort(),35000);
+    const response=await littleLabelsAIFetch(FUNCTION_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageDataUrl:image,target_language:language}),signal:work.controller.signal,isCurrent:current});
+    const data=await response.json();
+    if(!current())return;
+    const result=data?.identification,translated=language==='none'?'':result?.translation??result?.spanish??'';
+    if(!response.ok||data.success!==true||typeof result?.english!=='string'||!result.english.trim()||result.english.length>240||typeof translated!=='string'||translated.length>640)throw Error('Identification unavailable');
+    identification=result;$('englishInput').value=result.english.trim();$('spanishInput').value=translated.trim();
+    syncLabel();$('photoAIStatus').textContent='Suggested wording is ready. Review or edit it before saving.';
+  }catch(error){
+    if(current())$('photoAIStatus').textContent=error.code==='OWNER_AI_REQUIRED'?'Owner access could not be verified. Your manual label is still here.':'The request could not finish. Keep typing manually; choosing Identify photo again starts a new provider request.';
+  }finally{clearTimeout(timer);if(photoWork===work){photoWork=null;syncLabel();}}
 }
 
 function populateConfirm(){
@@ -1590,10 +1610,13 @@ function scheduleAutoTranslation(){
 }
 
 function syncLabel(){
-  $('photoIdentificationTools').classList.toggle('hidden',currentCreationSource!=='photo');
+  const ownerPhoto=currentCreationSource==='photo'&&window.LittleLabelsOwnerAI?.isOwner();
+  $('photoIdentificationTools').classList.toggle('hidden',!ownerPhoto);
+  $('identifyPhotoBtn').disabled=!ownerPhoto||!!photoWork||!!singleSaveJob&&!singleSaveJob.complete;
   $("labelEnglish").textContent=$("englishInput").value || "Material";
   $("labelSpanish").textContent=$("spanishInput").value || "material";
-  $("labelPhoto").src=activePhotoDataUrl || photoDataUrl;
+  const labelSource=activePhotoDataUrl || photoDataUrl;
+  if(labelSource)$("labelPhoto").src=labelSource;else $("labelPhoto").removeAttribute("src");
   $("photoModeNote").textContent = currentCreationSource === 'typed' ? 'Text-only label.' : (activePhotoDataUrl && activePhotoDataUrl===cleanedPhotoDataUrl)
     ? `Using ${cleanupMode} cleanup on a true white background.`
     : "Using the original photo.";
@@ -2350,11 +2373,11 @@ function setBatchProgress(text,cls="loading"){
   el.classList.remove("hidden");
 }
 
-async function callBatchFunction(payload){
+async function callBatchFunction(payload,isCurrent=()=>true,signal){
   const response=await littleLabelsAIFetch(BATCH_LABELS_URL,{
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(payload)
+    body:JSON.stringify(payload),isCurrent,signal
   });
   let data={};
   try{data=await response.json();}catch{}
@@ -2385,9 +2408,11 @@ async function createListDrafts(){
   setBatchProgress(`Creating ${items.length} label draft${items.length===1?"":"s"}…`);
 
   beginBatchDraft();
-  const context=batchDraftContext;
+  const context=batchDraftContext,nav=workflowNavigationVersion;
   try{
-    const data=await callBatchFunction({mode:"list",items});
+    const current=()=>{try{assertBatchDraft(context);return nav===workflowNavigationVersion}catch{return false}};
+    if(!(await window.LittleLabelsOwnerAI?.authorize('Prepare these labels? The listed words will be sent for AI wording.',current)))return;
+    const data=await callBatchFunction({mode:"list",items,target_language:batchLanguage().id},current);
     assertBatchDraft(context);
     batchDrafts=(data.items||[]).map((x,i)=>({
       id:crypto.randomUUID(),
@@ -2423,9 +2448,10 @@ function invalidateBatchTranslation(index){
 function invalidateBatchAsyncWork(){
   productLinkCreateRequest=null;
   const button=$('createLinkDraftBtn');
-  if(button){button.disabled=false;button.textContent='Create Product Label';}
+  if(button){button.disabled=false;button.textContent=window.LittleLabelsOwnerAI?.isOwner()?'Create Product Label':'Unlock more features';}
   batchTranslationTimers.forEach(clearTimeout);batchTranslationTimers.clear();
   batchTranslationRequestIds.clear();
+  for(const item of batchDrafts)item.translation_pending=false;
   for(const operation of batchPhotoRequests.values()){
     if(operation.button){operation.button.disabled=!!batchSaveJob&&!batchSaveJob.complete;operation.button.textContent=operation.buttonText;}
   }
@@ -2498,10 +2524,12 @@ async function createProductLinkDraft(){
   beginBatchDraft();
   const work=captureBatchWork();work.url=url;productLinkCreateRequest=work;
   const current=()=>productLinkCreateRequest===work && batchWorkIsCurrent(work) && $('productLinkInput').value.trim()===url;
-  const btn=$('createLinkDraftBtn');btn.disabled=true;btn.textContent='Reading product page…';
+  const btn=$('createLinkDraftBtn');btn.disabled=true;btn.textContent='Checking access…';
   setBatchProgress('Reading the product page and preparing the label…');
   try{
-    const data=await callBatchFunction({mode:'url',url,target_language:work.language.id});
+    if(!(await window.LittleLabelsOwnerAI?.authorize('Create a label from this product link? The retailer page will be retrieved and its product title sent for AI wording.',current)))return;
+    if(!current())return;btn.textContent='Reading product page…';
+    const data=await callBatchFunction({mode:'url',url,target_language:work.language.id},current);
     if(!current())return;
     const x=(data.items||[])[0];
     if(!x)throw new Error('No product label was returned.');
@@ -2519,12 +2547,13 @@ async function createProductLinkDraft(){
     console.error(err);
     setBatchProgress("I couldn't create that product label: "+err.message,'error');
   }finally{
-    if(productLinkCreateRequest===work){productLinkCreateRequest=null;btn.disabled=false;btn.textContent='Create Product Label';}
+    if(productLinkCreateRequest===work){productLinkCreateRequest=null;btn.disabled=false;btn.textContent=window.LittleLabelsOwnerAI?.isOwner()?'Create Product Label':'Unlock more features';}
   }
 }
 
 async function translateBatchItem(index,englishInput,spanishInput,status){
   const work=captureBatchWork(),item=batchDrafts[index];
+  if(!item||item.translation_pending)return;
   work.item=item;work.index=index;
   const english=(englishInput.value||'').trim(),manualValue=spanishInput.value;
   invalidateBatchTranslation(index);
@@ -2532,51 +2561,36 @@ async function translateBatchItem(index,englishInput,spanishInput,status){
   const current=()=>batchTranslationRequestIds.get(index)===requestId && batchWorkIsCurrent(work)
     && englishInput.isConnected && spanishInput.isConnected
     && english===englishInput.value.trim() && manualValue===spanishInput.value;
-  if(!item || !current())return;
-  if(work.language.id==='none'){
-    item.spanish='';item.translation_pending=false;spanishInput.value='';status.textContent='English-only labels are on.';return;
-  }
-  if(!english){item.translation_pending=false;status.textContent='Add English wording to translate.';return;}
+  if(!current())return;
+  if(work.language.id==='none'){item.spanish='';spanishInput.value='';status.textContent='English-only labels are on.';return;}
+  if(!english){status.textContent='Add English wording to translate.';return;}
   item.translation_pending=true;
-  status.textContent=`Translating ${work.language.name}…`;
+  const button=$(`batchTranslate-${index}`);if(button)button.disabled=true;
   try{
-    const response=await littleLabelsAIFetch(TRANSLATE_URL,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({english,target_language:work.language.id})
-    });
+    if(!(await window.LittleLabelsOwnerAI?.authorize('Translate this label? Its English wording and selected language will be sent for AI processing.',current)))return;
+    if(!current())return;
+    status.textContent=`Translating ${work.language.name}…`;
+    const response=await littleLabelsAIFetch(TRANSLATE_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({english,target_language:work.language.id}),isCurrent:current});
     let data={};try{data=await response.json();}catch{}
     if(!current())return;
     const translated=batchTranslationValue(data,work.language);
-    if(!response.ok || !data.success || !translated)throw new Error(data.error || data.details || `Request failed (${response.status})`);
-    spanishInput.value=translated;item.spanish=translated;item.target_language=work.language.id;item.translation_pending=false;
-    status.textContent=`✓ ${work.language.name} updated automatically`;
-  }catch(err){
-    if(!current())return;
-    item.translation_pending=false;
-    console.error('Batch auto-translation error:',err);
-    status.textContent=`${work.language.name} could not update automatically. You can still edit it manually.`;
-  }
+    if(!response.ok||data.success!==true||typeof translated!=='string'||!translated.trim()||translated.length>640)throw Error('Translation unavailable');
+    spanishInput.value=translated;item.spanish=translated;item.target_language=work.language.id;
+    status.textContent=`${work.language.name} updated. Review it before saving.`;
+  }catch(error){if(current())status.textContent='The request could not finish. Your wording was kept; trying again starts a new provider request.';}
+  finally{if(batchTranslationRequestIds.get(index)===requestId){item.translation_pending=false;if(button)button.disabled=false;}}
 }
 
 function scheduleBatchTranslation(index,englishInput,spanishInput,status){
   invalidateBatchTranslation(index);
-  const work=captureBatchWork(batchDraftContext,batchDrafts[index],index),requestId=batchTranslationRequestIds.get(index);
-  if(work.item){
-    work.item.translation_pending=work.language.id!=='none';
-    if(work.item.product_url){work.item.spanish='';spanishInput.value='';}
-  }
-  if(work.language.id==='none'){
-    if(work.item)work.item.spanish='';spanishInput.value='';status.textContent='English-only labels are on.';return;
-  }
-  status.textContent='Waiting for you to finish typing…';
-  const timer=setTimeout(()=>{
-    if(batchTranslationRequestIds.get(index)===requestId && batchWorkIsCurrent(work)
-      && englishInput.isConnected && spanishInput.isConnected)translateBatchItem(index,englishInput,spanishInput,status);
-  },900);
-  batchTranslationTimers.set(index,timer);
+  const item=batchDrafts[index],language=batchLanguage();
+  if(item)item.translation_pending=false;
+  if(language.id==='none'){if(item)item.spanish='';spanishInput.value='';status.textContent='English-only labels are on.';}
+  else status.textContent='Your wording was kept. Translate only when you choose.';
 }
 
 document.addEventListener('DOMContentLoaded',()=>{lastBatchLanguage=batchLanguage().id;});
+window.addEventListener('little-label-owner-ai-updated',()=>{const button=$('createLinkDraftBtn');if(button&&!productLinkCreateRequest)button.textContent=window.LittleLabelsOwnerAI?.isOwner()?'Create Product Label':'Unlock more features';if(!$('batchReview').classList.contains('hidden')&&!(batchSaveJob&&!batchSaveJob.complete))renderBatchReview();});
 window.addEventListener('little-label-settings-changed',()=>{
   const language=batchLanguage();
   if(language.id===lastBatchLanguage)return;
@@ -2591,6 +2605,7 @@ function renderBatchReview(){
   batchTranslationTimers.forEach(timer=>clearTimeout(timer));
   batchTranslationTimers.clear();
   batchTranslationRequestIds.clear();
+  for(const item of batchDrafts)item.translation_pending=false;
 
   const wrap=$("batchReviewItems");
   wrap.innerHTML="";
@@ -2599,8 +2614,8 @@ function renderBatchReview(){
     const language=item.product_url?batchLanguage():{id:'es',name:'Spanish'};
     const languageChanged=!!item.product_url && item.target_language!==language.id;
     if(item.product_url && !(batchSaveJob&&!batchSaveJob.complete)){
-      if(languageChanged || language.id==='none')item.spanish='';
-      if(languageChanged)item.translation_pending=language.id!=='none';
+      if(language.id==='none')item.spanish='';
+      if(languageChanged)item.translation_pending=false;
       item.target_language=language.id;
     }
     const card=document.createElement("div");
@@ -2659,6 +2674,9 @@ function renderBatchReview(){
     });
 
     fields.append(eLabel,english,sLabel,spanish,status);
+    const translate=document.createElement('button');translate.className='secondary';translate.id=`batchTranslate-${index}`;
+    const canTranslate=window.LittleLabelsOwnerAI?.isOwner();translate.textContent=canTranslate?'Translate':'Unlock more features';
+    translate.hidden=language.id==='none';translate.addEventListener('click',()=>translateBatchItem(index,english,spanish,status));fields.append(translate);
     if(item.product_url && item.notes){
       const notes=document.createElement('p');notes.className='tiny product-import-notes';notes.textContent=item.notes;fields.append(notes);
     }
@@ -2723,9 +2741,7 @@ function renderBatchReview(){
 
     card.append(grid,actions);
     wrap.append(card);
-    if((languageChanged || item.translation_pending) && language.id!=='none' && !(batchSaveJob&&!batchSaveJob.complete) && !$('batchReview').classList.contains('hidden')){
-      scheduleBatchTranslation(index,english,spanish,status);
-    }
+    if(languageChanged && language.id!=='none')status.textContent='Check your manual wording for the selected language, or choose Translate.';
   });
   lockBatchSaveControls();
 }
@@ -2739,7 +2755,8 @@ async function retryProductPhoto(index,button,img,status){
   button.disabled=true;button.textContent='Trying…';
   status.textContent='Looking for the exact product photo again…';
   try{
-    const data=await callBatchFunction({mode:'url',url:item.product_url,target_language:work.language.id});
+    if(!(await window.LittleLabelsOwnerAI?.authorize('Retry this product photo? The retailer page and image will be retrieved again. No AI wording or generated picture will be requested.',()=>batchPhotoWorkIsCurrent(work),'retrieval')))return;
+    const data=await callBatchFunction({mode:'url_photo',url:item.product_url,target_language:work.language.id},()=>batchPhotoWorkIsCurrent(work));
     if(!batchPhotoWorkIsCurrent(work))return;
     const x=(data.items||[])[0];
     if(!x)throw new Error('No product result was returned.');
@@ -2787,7 +2804,8 @@ async function regenerateBatchPicture(index,button,img,status){
   if(!work)return;
   button.disabled=true;button.textContent='Generating…';
   try{
-    const data=await callBatchFunction({mode:'image',english:work.item.english,spanish:work.item.spanish,target_language:work.language.id});
+    if(!(await window.LittleLabelsOwnerAI?.authorize('Generate a picture? This label wording will be sent for AI image generation.',()=>batchPhotoWorkIsCurrent(work))))return;
+    const data=await callBatchFunction({mode:'image',english:work.item.english,spanish:work.item.spanish,target_language:work.language.id},()=>batchPhotoWorkIsCurrent(work));
     if(!batchPhotoWorkIsCurrent(work))return;
     const x=(data.items||[])[0];
     if(!x?.photo_data)throw new Error('No picture was returned.');
@@ -3000,36 +3018,36 @@ updateSetSummary();
 </script>
 
 <!-- LITTLE_LABELS_DIRECT_PATCHES_START -->
-<script src="./ai-client.js?v=110"></script>
-<script src="./commercial-access.js?v=116"></script>
-<script src="./translation-credit-controls.js?v=manual-first-candidate"></script>
-<script src="./little-labels-admin.js?v=108"></script>
-<script src="./v1-audit-polish.js?v=116"></script>
-<script src="./home-grid-order.js?v=108"></script>
-<script src="./onboarding-help.js?v=108"></script>
-<script src="./label-workflow-save.js?v=114"></script>
-<script src="./make-list-isolated.js?v=116"></script>
-<script src="./make-list-polish.js?v=111"></script>
-<script src="./smart-print-layout.js?v=108"></script>
-<script src="./name-labels.js?v=116"></script>
-<script src="./name-labels-queue.js?v=114"></script>
-<script src="./queue-library-polish.js?v=114"></script>
-<script src="./little-labels-theme.js?v=108"></script>
-<script src="./label-settings.js?v=112"></script>
-<script src="./language-settings.js?v=111"></script>
-<script src="./identification-language.js?v=116"></script>
-<script src="./confirmation-cleanup.js?v=108"></script>
-<script src="./type-a-label.js?v=114"></script>
-<script src="./blank-input-placeholders.js?v=108"></script>
-<script src="./sellable-label-wiring.js?v=114"></script>
-<script src="./sellable-label-render.js?v=108"></script>
-<script src="./name-only-render.js?v=113"></script>
-<script src="./true-size-rotation-fix.js?v=108"></script>
-<script src="./background-cleanup-toggle.js?v=108"></script>
-<script src="./home-settings-gear.js?v=108"></script>
-<script src="./print-blank-fix.js?v=108"></script>
-<script src="./pdf-print.js?v=108"></script>
-<script src="./pwa-version-fix.js?v=116"></script>
+<script src="./ai-client.js?v=117"></script>
+<script src="./commercial-access.js?v=117"></script>
+<script src="./translation-credit-controls.js?v=117"></script>
+<script src="./little-labels-admin.js?v=117"></script>
+<script src="./v1-audit-polish.js?v=117"></script>
+<script src="./home-grid-order.js?v=117"></script>
+<script src="./onboarding-help.js?v=117"></script>
+<script src="./label-workflow-save.js?v=117"></script>
+<script src="./make-list-isolated.js?v=117"></script>
+<script src="./make-list-polish.js?v=117"></script>
+<script src="./smart-print-layout.js?v=117"></script>
+<script src="./name-labels.js?v=117"></script>
+<script src="./name-labels-queue.js?v=117"></script>
+<script src="./queue-library-polish.js?v=117"></script>
+<script src="./little-labels-theme.js?v=117"></script>
+<script src="./label-settings.js?v=117"></script>
+<script src="./language-settings.js?v=117"></script>
+<script src="./identification-language.js?v=117"></script>
+<script src="./confirmation-cleanup.js?v=117"></script>
+<script src="./type-a-label.js?v=117"></script>
+<script src="./blank-input-placeholders.js?v=117"></script>
+<script src="./sellable-label-wiring.js?v=117"></script>
+<script src="./sellable-label-render.js?v=117"></script>
+<script src="./name-only-render.js?v=117"></script>
+<script src="./true-size-rotation-fix.js?v=117"></script>
+<script src="./background-cleanup-toggle.js?v=117"></script>
+<script src="./home-settings-gear.js?v=117"></script>
+<script src="./print-blank-fix.js?v=117"></script>
+<script src="./pdf-print.js?v=117"></script>
+<script src="./pwa-version-fix.js?v=117"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>

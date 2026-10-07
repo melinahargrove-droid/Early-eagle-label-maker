@@ -25,8 +25,9 @@
     // The everyday editor has one optional-features entry point; processing and
     // charge disclosures belong inside the information/use confirmation flow.
     const cleanEditor = document.createElement('style');
-    cleanEditor.textContent = '#photoIdentificationTools{display:none!important}';
+    cleanEditor.textContent = '#photoIdentificationTools.hidden{display:none!important}';
     document.head.append(cleanEditor);
+    addEventListener('little-label-owner-ai-updated',()=>{syncLabel();});
     const libraryHelp=document.querySelector('#library > .card > p.muted') || document.querySelector('#library p.muted');
     if(libraryHelp)libraryHelp.textContent='Find saved labels and print them again.';
     const reprintHelp=document.querySelector('#reprint p.muted');

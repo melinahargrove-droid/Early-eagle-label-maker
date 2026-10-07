@@ -3,7 +3,7 @@
   let realClean=null;
 
   const css=document.createElement('style');
-  css.textContent=`.ll-cleanup-choice{margin:12px 0 4px;padding:12px 14px;border:1px solid #DDE6EC;border-radius:17px;background:#EEF7FD;display:flex;align-items:center;justify-content:space-between;gap:12px}.ll-cleanup-copy strong{display:block;color:#17375E}.ll-cleanup-copy small{display:block;color:#61758A;margin-top:3px;line-height:1.25}.ll-cleanup-switch{position:relative;width:50px;height:29px;flex:0 0 auto}.ll-cleanup-switch input{position:absolute;opacity:0}.ll-cleanup-track{position:absolute;inset:0;border-radius:999px;background:#E8EDF1;border:1px solid #D4DEE6;transition:.18s}.ll-cleanup-thumb{position:absolute;width:23px;height:23px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(23,55,94,.18);transition:.18s}.ll-cleanup-switch input:checked+.ll-cleanup-track{background:#BFDDF2;border-color:#8FB8D8}.ll-cleanup-switch input:checked+.ll-cleanup-track .ll-cleanup-thumb{transform:translateX(21px);background:#17375E}`;
+  css.textContent=`#llCleanupToggleWrap[hidden]{display:none!important}.ll-cleanup-choice{margin:12px 0 4px;padding:12px 14px;border:1px solid #DDE6EC;border-radius:17px;background:#EEF7FD;display:flex;align-items:center;justify-content:space-between;gap:12px}.ll-cleanup-copy strong{display:block;color:#17375E}.ll-cleanup-copy small{display:block;color:#61758A;margin-top:3px;line-height:1.25}.ll-cleanup-switch{position:relative;width:50px;height:29px;flex:0 0 auto}.ll-cleanup-switch input{position:absolute;opacity:0}.ll-cleanup-track{position:absolute;inset:0;border-radius:999px;background:#E8EDF1;border:1px solid #D4DEE6;transition:.18s}.ll-cleanup-thumb{position:absolute;width:23px;height:23px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(23,55,94,.18);transition:.18s}.ll-cleanup-switch input:checked+.ll-cleanup-track{background:#BFDDF2;border-color:#8FB8D8}.ll-cleanup-switch input:checked+.ll-cleanup-track .ll-cleanup-thumb{transform:translateX(21px);background:#17375E}`;
   document.head.appendChild(css);
 
   function hideCleanupExtras(){
@@ -14,6 +14,7 @@
   }
 
   function useOriginal(){
+    if(typeof cancelCleanupWork==='function')cancelCleanupWork();
     try{
       activePhotoDataUrl=photoDataUrl;
       cleanedPhotoDataUrl='';
@@ -56,21 +57,27 @@
   }
 
   function resetForNewPhoto(){
+    if(typeof cancelCleanupWork==='function')cancelCleanupWork();
     userWantsCleanup=false;
     const input=document.getElementById('llCleanupToggle');
     if(input) input.checked=false;
     hideCleanupExtras();
   }
 
+  function updateOwner(){
+    const wrap=document.getElementById('llCleanupToggleWrap'),input=document.getElementById('llCleanupToggle');
+    const owner=window.LittleLabelsOwnerAI?.isOwner();if(wrap)wrap.hidden=!owner;if(input)input.disabled=!owner;
+    if(!owner&&userWantsCleanup){userWantsCleanup=false;if(input)input.checked=false;useOriginal();}
+  }
   function install(){
     realClean=window.cleanBackground||globalThis.cleanBackground||null;
     try{cleanBackground=gatedClean}catch{}
     try{window.cleanBackground=gatedClean}catch{}
-    installToggle();
+    installToggle();updateOwner();window.addEventListener('little-label-owner-ai-updated',updateOwner);
     const observer=new MutationObserver(()=>{
       const confirm=document.getElementById('confirm');
       if(confirm&&!confirm.classList.contains('hidden')){
-        installToggle();
+        installToggle();updateOwner();
         if(!userWantsCleanup) useOriginal();
       }
     });

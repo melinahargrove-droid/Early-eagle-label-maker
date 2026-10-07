@@ -65,7 +65,9 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps ${{ matrix.browser }}
       - name: Exercise manual-first credit flows with synthetic data
-        run: node tests/manual-translation-browser.cjs
+        run: |
+          node tests/manual-translation-browser.cjs
+          node tests/owner-ai-browser.cjs
         env:
           BROWSER_ENGINE: ${{ matrix.browser }}
       - name: Exercise the isolated private-preview adapter
@@ -77,6 +79,13 @@ jobs:
           node tests/private-preview/tests/preview-browser.cjs
         env:
           BROWSER_ENGINE: ${{ matrix.browser }}
+      - name: Upload owner-AI browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owner-ai-${{ matrix.browser }}
+          path: test-results/owner-ai/${{ matrix.browser }}/
+          if-no-files-found: ignore
       - name: Upload private-preview browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -91,3 +100,15 @@ jobs:
           name: manual-first-${{ matrix.browser }}
           path: test-results/manual-first/${{ matrix.browser }}/
           if-no-files-found: ignore
+
+  owner-edge-deno:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check owner-guarded functions without running providers
+        run: deno check supabase/functions/*/index.ts
+      - name: Exercise native network adapter with mocked transports and no runtime permissions
+        run: deno run tests/product-link-deno-smoke.ts
