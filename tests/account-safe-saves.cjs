@@ -23,7 +23,7 @@ async function fixture({slowStartup=false}={}){
   const db={labels:new Map(),print_queue:new Map(),posts:[],fail:null,before:null,failReads:false};
   w.fetch=async(url,o={})=>{
     const table=new URL(url).pathname.split('/').pop();
-    if(!db[table] || !(db[table] instanceof Map))return response({active:true});
+    if(!db[table] || !(db[table] instanceof Map))return response({active:true,is_admin:true});
     if(o.method==='POST'){
       const rows=JSON.parse(o.body);assert.ok(Array.isArray(rows),'Stable insert uses row array');
       assert.match(o.headers.Prefer,/resolution=ignore-duplicates/);
@@ -39,6 +39,7 @@ async function fixture({slowStartup=false}={}){
     if(db.failReads)throw Error('Synthetic read unavailable');
     return response([...db[table].values()].map(x=>({...x})));
   };
+  if(!slowStartup)await w.LittleLabelsOwnerAI.check(true);
   w.prepareCloudPhoto=async value=>value;
   async function typed(name='Synthetic Label',second='Synthetic Translation'){
     w.show('home');click('homeTypeBtn');input('tlEnglish',name);input('tlSecond',second);click('tlNext');await tick();click('chooseSetBtn');await tick();
@@ -70,7 +71,7 @@ async function run(name,fn){const f=await fixture();try{await fn(f);await tick()
       f.w.fetch=(url,options)=>{if(url.includes('/rpc/little_labels_access_status')){checks++;return status.promise;}return base(url,options);};
       assert.equal(checks,0);
       f.startupAuth.resolve({access_token:'verified-A',refresh_token:'verified-r',user:{id:'stored-A',is_anonymous:false,email:'synthetic@example.invalid'}});await tick();
-      assert.equal(checks,1);assert.equal(f.$('llaCheckingPane').classList.contains('lla-hidden'),false);
+      assert.equal(checks,2);assert.equal(f.$('llaCheckingPane').classList.contains('lla-hidden'),false);
       status.resolve(response({active:false}));await tick();assert.equal(f.$('llaActivatePane').classList.contains('lla-hidden'),false);assert.deepEqual(f.errors,[]);
       console.log('PASS slow restored session stays account-gated until verified, then checks purchase once');count++;
     }finally{f.w.close();}
@@ -86,13 +87,13 @@ async function run(name,fn){const f=await fixture();try{await fn(f);await tick()
     }finally{f.w.close();}
   }
   for(const same of [false,true])await run('delayed 401 cannot replay into '+(same?'replacement same-user':'another-user')+' session',async({w})=>{
-    const wait=deferred(),calls=[];w.fetch=async(url,o)=>{if(url.includes('/rpc/'))return response({active:true});calls.push(o.headers.Authorization);return wait.promise;};
+    const wait=deferred(),calls=[];w.fetch=async(url,o)=>{if(url.includes('/rpc/'))return response({active:true,is_admin:true});calls.push(o.headers.Authorization);return wait.promise;};
     const pending=w.restFetch('labels',{method:'POST',body:'[]'}).catch(e=>e);w.setAccount(same?'A':'B','-new');wait.resolve(response({},401));
     assert.equal((await pending).code,'SESSION_CHANGED');assert.deepEqual(calls,['Bearer token-A']);
   });
   for(const stage of ['refresh','json'])await run('switch during '+stage+' cannot publish old session/data',async({w})=>{
     const wait=deferred();let reads=0;w.fetch=async(url)=>{
-      if(url.includes('/rpc/'))return response({active:true});
+      if(url.includes('/rpc/'))return response({active:true,is_admin:true});
       if(url.includes('/auth/'))return {ok:true,status:200,json:()=>wait.promise};
       if(stage==='refresh'&&++reads===1)return response({},401);
       return {ok:true,status:200,json:()=>wait.promise};
@@ -106,7 +107,7 @@ async function run(name,fn){const f=await fixture();try{await fn(f);await tick()
     const auth=deferred(),late=deferred();let refreshes=0;const seen=[];
     w.fetch=async(url,o)=>{
       if(url.includes('/auth/')){refreshes++;return {ok:true,status:200,json:()=>auth.promise};}
-      if(url.includes('/rpc/'))return response({active:true});
+      if(url.includes('/rpc/'))return response({active:true,is_admin:true});
       seen.push([url,o.headers.Authorization]);
       if(o.headers.Authorization==='Bearer token-A')return url.endsWith('late')?late.promise:response({},401);
       return response([]);
@@ -117,7 +118,7 @@ async function run(name,fn){const f=await fixture();try{await fn(f);await tick()
   });
   await run('signout invalidates old refresh before waiting for logout',async({w})=>{
     const auth=deferred(),logout=deferred();w.fetch=async(url)=>{
-      if(url.includes('/rpc/'))return response({active:true});
+      if(url.includes('/rpc/'))return response({active:true,is_admin:true});
       if(url.includes('grant_type=refresh_token'))return {ok:true,status:200,json:()=>auth.promise};
       if(url.includes('logout'))return logout.promise;
       if(url.includes('signup'))return response({access_token:'anon',refresh_token:'anon-r',user:{id:'anonymous'}});
@@ -135,7 +136,7 @@ async function run(name,fn){const f=await fixture();try{await fn(f);await tick()
     wait.resolve(response([]));assert.equal((await old).code,'SESSION_CHANGED');assert.equal($('englishInput').value,'');assert.equal($('labelPhoto').getAttribute('src'),null);
   });
   await run('newer overlapping cloud read wins; read during a write cannot replace state',async({w,db})=>{
-    const waits=[];const base=w.fetch;w.fetch=(url,o)=>{if(url.includes('/rpc/'))return response({active:true});if(o.method==='POST')return base(url,o);const d=deferred();waits.push(d);return d.promise;};
+    const waits=[];const base=w.fetch;w.fetch=(url,o)=>{if(url.includes('/rpc/'))return response({active:true,is_admin:true});if(o.method==='POST')return base(url,o);const d=deferred();waits.push(d);return d.promise;};
     const first=w.loadCloudData(),second=w.loadCloudData();await tick();
     waits[2].resolve(response([{id:'new-queue'}]));waits[3].resolve(response([{id:'new-master'}]));await second;
     waits[0].resolve(response([{id:'old-queue'}]));waits[1].resolve(response([{id:'old-master'}]));assert.equal(await first,false);assert.equal(w.eval('queue[0].id'),'new-queue');
@@ -145,7 +146,7 @@ async function run(name,fn){const f=await fixture();try{await fn(f);await tick()
   await run('stale init failure cannot turn a newly signed-in account into local-only mode',async({w})=>{
     const waits=[];w.fetch=async(url)=>{
       if(url.includes('/auth/'))return response({access_token:'refreshed-A',refresh_token:'refreshed-r',user:{id:'A'}});
-      if(url.includes('/rpc/'))return response({active:true});const d=deferred();waits.push(d);return d.promise;
+      if(url.includes('/rpc/'))return response({active:true,is_admin:true});const d=deferred();waits.push(d);return d.promise;
     };
     const init=w.initCloud();await tick();w.setAccount('B');for(const d of waits)d.resolve(response([]));await init;
     assert.equal(w.eval('currentUser.id'),'B');assert.equal(w.eval('cloudReady'),true);
@@ -234,9 +235,9 @@ async function run(name,fn){const f=await fixture();try{await fn(f);await tick()
     w.setAccount('B');raster.resolve('data:image/png;base64,U1lOVEhFVElD');await pending;
     assert.equal($('printRoot').textContent,'');assert.equal($('printRoot').querySelectorAll('img').length,0);assert.equal($('sheetPreviewPages').textContent,'');assert.equal(w.eval('printBatchIds.length+printLayoutPages.length'),0);
   });
-  await run('real photo-identification and save handler retries a lost queue response',async({w,db,click})=>{
-    w.compressImage=async()=> 'synthetic-photo-A';w.littleLabelsAIFetch=async()=>response({success:true,identification:{english:'Photo label',spanish:'Photo second'}});
-    await w.handlePhoto({name:'synthetic.png'});click('thatsRight');click('chooseSetBtn');await tick();db.fail={table:'print_queue',when:'after'};click('addToQueue');await tick();click('addToQueue');await tick();
+  await run('manual photo and save handler retries a lost queue response without AI',async({w,db,click,input})=>{
+    w.compressImage=async()=> 'synthetic-photo-A';w.littleLabelsAIFetch=async()=>{throw Error('Photo must not call AI')};
+    await w.handlePhoto({name:'synthetic.png'});input('englishInput','Photo label');input('spanishInput','Photo second');click('chooseSetBtn');await tick();db.fail={table:'print_queue',when:'after'};click('addToQueue');await tick();click('addToQueue');await tick();
     assert.equal(db.labels.size,1);assert.equal(db.print_queue.size,2);assert.equal([...db.labels.values()][0].photo_data,'synthetic-photo-A');
   });
   await run('account replacement clears synthetic password and verification form values',async({w,$})=>{

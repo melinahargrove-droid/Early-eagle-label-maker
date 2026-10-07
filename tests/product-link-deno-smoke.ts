@@ -21,5 +21,5 @@ try {
   assert(writes.join('').includes('Host: shop.example.com\r\n') && !writes.join('').includes('Authorization'), 'Fixed safe outbound headers');
   assert(!isPublicAddress('169.254.169.254') && !isPublicAddress('168.63.129.16') && !isPublicAddress('::ffff:127.0.0.1'), 'Metadata and mapped addresses are denied');
   let rejected = false; try { productUrl('https://127.0.0.1'); } catch { rejected = true; } assert(rejected, 'IP URLs are denied before sockets');
-  console.log('PASS native Deno 2.1.4 mocked DNS/TCP/TLS/partial HTTP read; zero network permissions granted');
+  console.log(`PASS native Deno ${Deno.version.deno} mocked DNS/TCP/TLS/partial HTTP read; zero network permissions granted`);
 } finally { Object.assign(Deno, native); }

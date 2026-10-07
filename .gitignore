@@ -1,3 +1,6 @@
 node_modules/
 test-results/
 playwright-report/
+tests/private-preview/dist/
+tests/private-preview/SOURCE-CHECKPOINT.json
+tests/private-preview/README.md

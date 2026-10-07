@@ -13,7 +13,7 @@ const product=(language,extra={})=>({success:true,items:[{english:'Synthetic Blo
     browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
     const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[],requests=[],held=[];
     let holdNextProduct=false;
-    page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.dismiss());
+    page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.type()==='confirm'?dialog.accept():dialog.dismiss());
     await page.addInitScript(()=>localStorage.setItem('littleLabelsWelcomeSeenV1','1'));
     await page.route('**/*',async route=>{
       const request=route.request(),url=request.url();
@@ -25,14 +25,14 @@ const product=(language,extra={})=>({success:true,items:[{english:'Synthetic Blo
         return fulfill(product(payload.target_language));
       }
       if(url.includes('/functions/v1/translate-label')){const payload=request.postDataJSON();requests.push(payload);return fulfill({success:true,translation:'Cubes à compter',language:payload.target_language});}
-      if(url.includes('.supabase.co/'))return fulfill(url.includes('/auth/')?{access_token:'synthetic-token',refresh_token:'synthetic-refresh',user:{id:'synthetic-owner',is_anonymous:false,email:'synthetic@example.invalid',identities:[{}]}}:url.includes('/rpc/')?{active:true}:[]);
+      if(url.includes('.supabase.co/'))return fulfill(url.includes('/auth/')?{access_token:'synthetic-token',refresh_token:'synthetic-refresh',user:{id:'synthetic-owner',is_anonymous:false,email:'synthetic@example.invalid',identities:[{}]}}:url.includes('/rpc/')?{active:true,is_admin:true}:[]);
       return route.abort();
     });
-    await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.waitForFunction(()=>window.LittleLabelSettings&&cloudReady);await page.evaluate(()=>LittleLabelsAccess.check());
+    await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.waitForFunction(()=>window.LittleLabelSettings&&cloudReady);await page.evaluate(()=>LittleLabelsAccess.check());await page.evaluate(()=>LittleLabelsOwnerAI.check(true));
     await page.locator('#littleLabelsSettingsBtn').click();await page.locator('#llsLanguage').selectOption('fr');await page.locator('#llsBack').click();
     await page.locator('#homeProductBtn').click();await page.locator('#productLinkInput').fill('https://retailer.example/item');await page.locator('#createLinkDraftBtn').click();await page.locator('#batchReview').waitFor({state:'visible'});
     assert.equal(requests[0].target_language,'fr');assert.equal(await page.locator('label[for="batchSecond-0"]').textContent(),'French');assert.equal(await page.locator('#batchSecond-0').inputValue(),'Cubes');
-    await page.locator('#batchEnglish-0').fill('Counting blocks');await page.waitForFunction(()=>document.getElementById('batchSecond-0').value==='Cubes à compter');assert.equal(requests.at(-1).target_language,'fr');
+    await page.locator('#batchEnglish-0').fill('Counting blocks');const beforeTranslation=requests.length;await page.waitForTimeout(950);assert.equal(requests.length,beforeTranslation);await page.locator('#batchTranslate-0').click();await page.waitForFunction(()=>document.getElementById('batchSecond-0').value==='Cubes à compter');assert.equal(requests.at(-1).target_language,'fr');
     const screenshots=process.env.PRODUCT_LINK_SCREENSHOTS;
     if(screenshots){fs.mkdirSync(screenshots,{recursive:true});await page.screenshot({path:path.join(screenshots,'french-missing-photo.png'),fullPage:true});}
     assert.equal(await page.locator('#batchReviewItems img').getAttribute('src'),null);
@@ -42,7 +42,7 @@ const product=(language,extra={})=>({success:true,items:[{english:'Synthetic Blo
     console.log('PASS Chromium mobile French creation, edit retranslation, missing photo, and real file upload');
     // Retry response arrives while wording is manually edited.
     await page.locator('#batchReviewBack').click();await page.locator('#createLinkDraftBtn').click();await page.locator('#batchReview').waitFor({state:'visible'});
-    holdNextProduct=true;await page.getByRole('button',{name:'↻ Try Product Photo Again'}).click();await page.waitForFunction(()=>document.querySelector('#batchReviewItems button').textContent==='Trying…');
+    holdNextProduct=true;await page.getByRole('button',{name:'↻ Try Product Photo Again'}).click();await page.getByRole('button',{name:'Trying…'}).waitFor({state:'visible'});
     await page.locator('#batchEnglish-0').fill('My blocks');await page.locator('#batchSecond-0').fill('Mes cubes');
     while(!held.length)await new Promise(resolve=>setTimeout(resolve,5));await held.shift().fulfill(product('fr',{english:'Unwanted title',translation:'Unwanted translation',spanish:'Unwanted translation',photo_data:photo,image_source:'product',needs_product_image:false}));
     await page.waitForFunction(()=>batchDrafts[0].image_source==='product');assert.equal(await page.locator('#batchEnglish-0').inputValue(),'My blocks');assert.equal(await page.locator('#batchSecond-0').inputValue(),'Mes cubes');

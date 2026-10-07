@@ -1,6 +1,17 @@
-import { requireLittleLabelsAccess, consumeLittleLabelsQuota } from "../_shared/access.ts";
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-const KEY=Deno.env.get('OPENAI_API_KEY');const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS'};const reply=(x:any,s=200)=>new Response(JSON.stringify(x),{status:s,headers:{...cors,'Content-Type':'application/json'}});
-Deno.serve(async req=>{if(req.method==='OPTIONS')return new Response('ok',{headers:cors});
-const accessDenied = await requireLittleLabelsAccess(req); if (accessDenied) return accessDenied;
-try{const {english}=await req.json();if(!english)return reply({success:false,error:'Wording required'},400);const quotaDenied=await consumeLittleLabelsQuota(req,'picture');if(quotaDenied)return quotaDenied;const r=await fetch('https://api.openai.com/v1/images/generations',{method:'POST',headers:{Authorization:`Bearer ${KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-image-2',prompt:`Clean realistic preschool classroom label photograph of ${String(english).trim()}. Show only the material, centered, isolated on pure white, no text, no hands, no room background.`,size:'1024x1024',quality:'low',output_format:'webp',output_compression:55})});const d=await r.json();if(!r.ok)throw Error(d?.error?.message||'Image failed');const b=d?.data?.[0]?.b64_json;if(!b)throw Error('No image returned');return reply({success:true,photo_data:`data:image/webp;base64,${b}`})}catch(e){return reply({success:false,error:e instanceof Error?e.message:'Image failed'},500)}});
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import { requireLittleLabelsAccess, consumeLittleLabelsQuota } from '../_shared/access.ts';
+import { aiCors, aiJson, aiFailure, readAiBody, aiLanguage, aiLabel, requireAiKey, aiGenerateImage } from '../_shared/ai.ts';
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: aiCors });
+  const accessDenied = await requireLittleLabelsAccess(req);
+  if (accessDenied) return accessDenied;
+  try {
+    const body = await readAiBody(req), english = aiLabel(body.english, 'English wording');
+    aiLanguage(body);
+    requireAiKey();
+    const quotaDenied = await consumeLittleLabelsQuota(req, 'picture');
+    if (quotaDenied) return quotaDenied;
+    return aiJson({ success: true, photo_data: await aiGenerateImage(english) });
+  } catch (error) { return aiFailure(error); }
+});
