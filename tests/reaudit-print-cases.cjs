@@ -6,7 +6,7 @@ module.exports=async function exercisePrintCases({page,expect,assert,engine,widt
  const meta=await page.evaluate(()=>LittleLabelSettings.meta);
  const items=(ids,prefix)=>ids.map((id,i)=>({id:`synthetic-${prefix}-${i}`,english:`QA ${prefix} ${i+1}`,spanish:i%2?'Manual wording':'',photo,size:meta[id].name+' · '+meta[id].dims.split(' · ')[0]}));
  async function printCase(name,rows,cuts,expectedPages){
-  await page.evaluate(rows=>{queue=rows;show('queue');renderQueue();},rows);
+  await page.evaluate(rows=>{queue=rows;show('queue');refreshQueue();},rows);
   await page.locator('#mockSheets').click();await expect(page.locator('#printPreview')).toBeVisible();
   // Establish the initial output before a separate user cut-line change. A
   // render-overlap regression is tracked separately from these normal PDFs.

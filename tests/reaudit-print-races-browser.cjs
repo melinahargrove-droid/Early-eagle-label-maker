@@ -4,7 +4,7 @@ const fs=require('node:fs'),path=require('node:path');
 module.exports=async({page,expect,assert,engine,width,out,photo,db,writes})=>{
  const original=await page.evaluate(()=>queue),dbBefore=JSON.stringify([...db.print_queue]),writesBefore=writes.length;
  await page.evaluate(image=>{
-  queue=[{id:'synthetic-race-sheet',english:'QA Print race',spanish:'Manual',photo:image,size:'Business Card · 3.375 × 2 in'}];show('queue');renderQueue();
+  queue=[{id:'synthetic-race-sheet',english:'QA Print race',spanish:'Manual',photo:image,size:'Business Card · 3.375 × 2 in'}];show('queue');refreshQueue();
   document.getElementById('cutLinesToggle').checked=true;
   const base=window.rasterizeFinishedLabel;window.__printRaceJobs=[];
   window.__restorePrintRace=()=>{window.rasterizeFinishedLabel=base;};
