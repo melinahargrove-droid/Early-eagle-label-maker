@@ -7,7 +7,7 @@
     "test:browser": "node tests/caption-fit-browser.cjs && node tests/audit-browser.cjs && node tests/owner-ai-browser.cjs && node tests/manual-translation-browser.cjs && node tests/customer-access-browser.cjs && node tests/workflows.cjs && node tests/activation-browser.cjs && node tests/size-settings-browser.cjs && node tests/name-only-browser.cjs && node tests/product-link-browser.cjs",
     "test:security": "node tests/ai-client.cjs && node tests/edge-access.cjs && node tests/database-access.cjs && node tests/product-link-edge.cjs && node tests/network-transport.cjs && node tests/owner-ai-edge.cjs",
     "test:manual-first": "node tests/manual-translation.cjs && node tests/manual-translation-independent.cjs",
-    "test:audit": "node tests/audit-library-editor.cjs && node tests/audit-list-manual.cjs && node tests/names-onboarding-accessibility.cjs && node tests/audit-reprint.cjs && node tests/caption-fit.cjs"
+    "test:audit": "node tests/reaudit-native-print.cjs && node tests/reaudit-print-race.cjs && node tests/reaudit-name-guidance.cjs && node tests/reaudit-bulk-tools.cjs && node tests/reaudit-customer-account.cjs && node tests/audit-library-editor.cjs && node tests/audit-list-manual.cjs && node tests/names-onboarding-accessibility.cjs && node tests/audit-reprint.cjs && node tests/caption-fit.cjs"
   },
   "repository": {
     "type": "git",

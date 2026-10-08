@@ -28,7 +28,7 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
   try {
     browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
     async function fixture(options = {}) {
-      const context = await browser.newContext({ serviceWorkers: 'block' });
+      const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: options.width || 1280, height: 900 } });
       const page = await context.newPage();
       page.setDefaultTimeout(5000);
       const model = {
@@ -258,16 +258,20 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
       assert.equal(await f.page.evaluate(() => LittleLabelsAccess.isActive()), true);
       await f.close(); console.log('PASS synthetic activation error/retry, duplicate/focus guards, success, and purchased return');
     }
-    {
-      const f = await fixture(); await f.ready();
+    for (const width of [390,768,1280]) {
+      const f = await fixture({width}); await f.ready();
+      const output = process.env.CUSTOMER_ACCESS_SCREENSHOTS || path.join(root,'test-results/customer-access');fs.mkdirSync(output,{recursive:true});
+      const checkWidth = async () => assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,'Customer controls fit the viewport');
       const oldId = await f.page.evaluate(() => currentUser.id);
       await f.page.locator('#llaAccount').click();
       await f.page.locator('#accountEmail').fill('synthetic-converted@example.invalid');
       await f.page.locator('#sendAccountCodeBtn').click();
+      await checkWidth();await f.page.screenshot({path:path.join(output,`signup-code-${width}.png`),fullPage:true});
       await f.page.locator('#accountCode').fill('000000');
       await f.page.locator('#verifyAccountCodeBtn').click();
       await f.page.locator('#newAccountPassword').fill('synthetic-only-password');
       await f.page.locator('#newAccountPassword2').fill('synthetic-only-password');
+      await checkWidth();await f.page.screenshot({path:path.join(output,`signup-password-${width}.png`),fullPage:true});
       await f.page.locator('#finishAccountBtn').click();
       await expect.poll(() => f.model.statusCalls.length).toBeGreaterThan(0);
       await expect(f.page.locator('#account')).toBeVisible();
@@ -276,7 +280,9 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
       await gate(f.page, 'llaActivatePane');
       assert.deepEqual(await f.page.evaluate(() => ({ id: currentUser.id, permanent: userIsPermanent(currentUser) })), { id: oldId, permanent: true });
       assert.ok(f.model.statusCalls.length > 0, 'same-ID conversion triggers entitlement despite unchanged owner');
-      await f.close(); console.log('PASS real synthetic signup controls convert same user ID and recheck access');
+      await checkWidth();await f.page.screenshot({path:path.join(output,`customer-activation-${width}.png`),fullPage:true});
+      await f.page.locator('#llaCode').fill('SYNTHETIC-CODE');await f.page.locator('#llaActivate').click();await expect(f.page.locator('#llAccessGate')).toBeHidden();assert.equal(await f.page.evaluate(()=>LittleLabelsAccess.isActive()),true);assert.equal(await f.page.evaluate(()=>LittleLabelsOwnerAI.isOwner()),false);await checkWidth();
+      await f.close(); console.log(`PASS ${width}px native customer signup, same-ID conversion and activation; all responses synthetic`);
     }
     console.log('PASS all activation browser scenarios; all auth, purchase, AI and cloud traffic isolated');
   } finally {

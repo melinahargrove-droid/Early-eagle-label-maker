@@ -12,47 +12,90 @@
   }`;
   document.head.appendChild(s);
 
-  async function waitForPrintImages(){
-    const root=document.getElementById('printRoot');
-    if(!root) return false;
-    root.removeAttribute('aria-hidden');
-    const imgs=[...root.querySelectorAll('img')];
-    if(!imgs.length) return false;
-    await Promise.all(imgs.map(async img=>{
-      if(!img.complete){
-        await new Promise(resolve=>{
-          const done=()=>resolve();
-          img.addEventListener('load',done,{once:true});
-          img.addEventListener('error',done,{once:true});
-        });
-      }
-      if(img.decode){try{await img.decode();}catch{}}
+  function waitForImageLoad(img,signal){
+    if(signal.aborted)return Promise.resolve(false);
+    if(img.complete)return Promise.resolve(img.naturalWidth>0);
+    return new Promise(resolve=>{
+      const done=ok=>{img.removeEventListener('load',loaded);img.removeEventListener('error',failed);signal.removeEventListener('abort',failed);resolve(ok);};
+      const loaded=()=>done(img.naturalWidth>0),failed=()=>done(false);
+      img.addEventListener('load',loaded,{once:true});img.addEventListener('error',failed,{once:true});signal.addEventListener('abort',failed,{once:true});
+    });
+  }
+  function waitForDecode(img,signal){
+    if(signal.aborted)return Promise.resolve(false);
+    if(!img.decode)return Promise.resolve(true);
+    return new Promise(resolve=>{
+      const done=ok=>{signal.removeEventListener('abort',cancel);resolve(ok);},cancel=()=>done(false);
+      signal.addEventListener('abort',cancel,{once:true});
+      try{Promise.resolve(img.decode()).then(()=>done(true),()=>done(false));}catch{done(false);}
+    });
+  }
+  function waitForFrame(signal){
+    if(signal.aborted)return Promise.resolve(false);
+    return new Promise(resolve=>{
+      const cancel=()=>{cancelAnimationFrame(frame);resolve(false);};
+      const frame=requestAnimationFrame(()=>{signal.removeEventListener('abort',cancel);resolve(true);});
+      signal.addEventListener('abort',cancel,{once:true});
+    });
+  }
+  async function waitForPrintImages(job,isCurrent){
+    const signal=job.controller.signal;
+    const ready=await Promise.all(job.images.map(async img=>{
+      const ready=await waitForImageLoad(img,signal)&&isCurrent()&&await waitForDecode(img,signal)&&isCurrent()&&img.complete&&img.naturalWidth>0;
+      if(!ready)job.controller.abort();
+      return ready;
     }));
-    // Let Chrome commit the decoded images to the rendered print tree.
-    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-    return true;
+    if(!ready.every(Boolean)||!isCurrent())return false;
+    // Let Chrome commit the decoded images, checking the click's render at both frames.
+    for(let frame=0;frame<2;frame++)if(!await waitForFrame(signal)||!isCurrent())return false;
+    return isCurrent();
   }
 
   function install(){
     const btn=document.getElementById('printNowBtn');
     if(!btn || btn.dataset.androidPrintFix==='1') return;
     btn.dataset.androidPrintFix='1';
+    let active=null;
+    document.addEventListener('little-label-print-invalidated',()=>{
+      if(!active)return;
+      const old=active;active=null;old.controller.abort();
+      if(btn.textContent==='Preparing print…')btn.textContent=old.text;
+    });
     btn.addEventListener('click',async e=>{
       e.preventDefault();
       e.stopImmediatePropagation();
-      const old=btn.textContent;
+      if(btn.disabled||active)return;
+      const state=window.LittleLabelPrintState,snapshot=state?.capture(),root=document.getElementById('printRoot');
+      const images=root?[...root.querySelectorAll('img')]:[];
+      if(!state?.isCurrent(snapshot)||!images.length)return;
+      const job={snapshot,root,images,text:btn.textContent,controller:new AbortController()};active=job;
+      const isCurrent=()=>{
+        if(active!==job||!state.isCurrent(snapshot)||root!==document.getElementById('printRoot'))return false;
+        const currentImages=[...root.querySelectorAll('img')];
+        return images.length===currentImages.length&&images.every((img,index)=>img===currentImages[index]);
+      };
+      root.removeAttribute('aria-hidden');
       btn.disabled=true;
       btn.textContent='Preparing print…';
       try{
-        const ready=await waitForPrintImages();
+        const ready=await waitForPrintImages(job,isCurrent);
+        if(!isCurrent())return;
         if(!ready){
-          alert('The print sheet is not ready yet. Please tap Create Print Sheets again.');
+          alert('The print sheet is not ready yet. Please try Print Labels again.');
           return;
         }
         window.print();
+      }catch(error){
+        if(isCurrent()){
+          console.error('Could not open print dialog:',error);
+          alert("I couldn't open the print dialog. Please try Print Labels again.");
+        }
       }finally{
-        btn.disabled=false;
-        btn.textContent=old;
+        if(active===job){
+          const current=isCurrent();active=null;
+          if(current)btn.disabled=false;
+          if(btn.textContent==='Preparing print…')btn.textContent=job.text;
+        }
       }
     },true);
   }

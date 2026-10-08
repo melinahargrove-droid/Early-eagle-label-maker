@@ -58,7 +58,7 @@ let total=0;async function test(name,fn,owner=true){const f=await fixture(owner)
   const hold=deferred();f.setHook(r=>r.path.endsWith('little_labels_admin_status')?hold.promise:undefined);const pending=f.w.LittleLabelsOwnerAI.check(true);await tick();await f.switchAccount('customer-B');hold.resolve(reply({is_admin:true}));await pending;assert.equal(f.w.LittleLabelsOwnerAI.isOwner(),false);assert.equal(f.ai().length,0);
  });
  await test('list translation is explicit and picture sequence stops after Back',async f=>{
-  f.w.show('makeList');f.input('makeListInput','Blocks\nPencils');f.$('makeListCreateBtn').click();assert.equal(f.ai().length,0);f.$('mliTranslate').click();await tick();await tick();assert.equal(f.ai().length,1);assert.match(f.w.document.querySelector('.mli-tr').value,/Manual-ready/);
+  f.w.show('makeList');f.input('makeListInput','Blocks\nPencils');f.$('makeListCreateBtn').click();assert.equal(f.ai().length,0);f.$('mliOptionalTools').open=true;await tick();f.$('mliTranslate').click();await tick();await tick();assert.equal(f.ai().length,1);assert.match(f.w.document.querySelector('.mli-tr').value,/Manual-ready/);
   const hold=deferred();f.setHook(r=>r.path.endsWith('label-picture')?hold.promise:undefined);f.$('mliAllPics').click();await tick();assert.equal(f.ai().filter(x=>x.path.endsWith('label-picture')).length,1);f.$('mliBack').click();hold.resolve(reply({success:true,photo_data:photo}));await tick();await tick();assert.equal(f.ai().filter(x=>x.path.endsWith('label-picture')).length,1);f.$('makeListCreateBtn').click();assert.equal(f.w.document.querySelectorAll('.mli-preview img').length,0);
  });
  await test('nonowner list has a single unlock entry and zero provider dispatch',async f=>{

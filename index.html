@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eff6ff">
   <title>Little Labels</title>
-  <link rel="manifest" href="manifest.webmanifest?v=118">
+  <link rel="manifest" href="manifest.webmanifest?v=119">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -624,7 +624,7 @@
     </div>
   </section>
 
-  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 118</span></p>
+  <p class="footer-note">When cloud saving is connected, your queue and label library are saved to your account. Session-only changes are lost when you close or reload the app.<br><span style="opacity:.65">App build 119</span></p>
 </div>
 
 <div id="printRoot" aria-hidden="true"></div>
@@ -2182,12 +2182,36 @@ async function rasterizeFinishedLabel(item){
 
   return canvas.toDataURL("image/png");
 }
-async function buildRasterPrintPages(){
+// Only the latest open preview may publish sheets or recover its controls.
+// Navigation/account changes also invalidate work still waiting on image rasters.
+let printRenderRevision=0,readyPrintRender=null;
+function invalidatePrintRender(){
+  readyPrintRender=null;
+  printRenderRevision++;
+  document.dispatchEvent(new CustomEvent('little-label-print-invalidated'));
+  return printRenderRevision;
+}
+window.LittleLabelPrintState={
+  capture:()=>readyPrintRender,
+  isCurrent:snapshot=>!!snapshot&&snapshot===readyPrintRender&&snapshot.isCurrent()
+};
+function cancelPrintRender(){
+  invalidatePrintRender();
+  for(const id of ['sheetPreviewPages','printRoot','printSheetSummary'])$(id)?.replaceChildren();
+  for(const id of ['printNowBtn','markSheetPrintedBtn'])if($(id))$(id).disabled=true;
+}
+document.addEventListener('little-label-navigation',cancelPrintRender);
+document.addEventListener('little-label-account-changed',cancelPrintRender);
+
+async function buildRasterPrintPages(layoutPages=printLayoutPages,isCurrent=()=>true){
   const pages=[];
-  for(const page of printLayoutPages){
+  for(const page of layoutPages){
     const rasterItems=[];
     for(const item of page){
-      rasterItems.push({...item,_raster:await rasterizeFinishedLabel(item)});
+      if(!isCurrent())return [];
+      const raster=await rasterizeFinishedLabel(item);
+      if(!isCurrent())return [];
+      rasterItems.push({...item,_raster:raster});
     }
     pages.push(rasterItems);
   }
@@ -2195,14 +2219,22 @@ async function buildRasterPrintPages(){
 }
 
 async function renderPrintSheets(){
+  if($('printPreview').classList.contains('hidden')||!printLayoutPages.length)return false;
+  const revision=invalidatePrintRender(),layout=printLayoutPages,batch=printBatchIds;
+  const isCurrent=()=>revision===printRenderRevision&&!$('printPreview').classList.contains('hidden')&&layout===printLayoutPages&&batch===printBatchIds;
+  const layoutPages=layout.map(page=>page.map(item=>({...item}))),count=batch.length;
   const showCuts=$("cutLinesToggle").checked;
   const preview=$("sheetPreviewPages");
   const printRoot=$("printRoot");
+  for(const id of ['printNowBtn','markSheetPrintedBtn'])if($(id))$(id).disabled=true;
   preview.innerHTML='<div class="status loading">Rendering your finished labels…</div>';
   printRoot.innerHTML="";
+  $('printSheetSummary').textContent='';
 
-  const rasterPages=await buildRasterPrintPages();
-  preview.innerHTML="";
+  try{
+  const rasterPages=await buildRasterPrintPages(layoutPages,isCurrent);
+  if(!isCurrent())return false;
+  const previewPages=document.createDocumentFragment(),printPages=document.createDocumentFragment();
 
   rasterPages.forEach((page)=>{
     const previewPage=document.createElement("div");
@@ -2231,13 +2263,28 @@ async function renderPrintSheets(){
       printPage.appendChild(exact);
     });
 
-    preview.appendChild(previewPage);
-    printRoot.appendChild(printPage);
+    previewPages.appendChild(previewPage);
+    printPages.appendChild(printPage);
   });
 
-  const count=printBatchIds.length;
+  preview.replaceChildren(previewPages);
+  printRoot.replaceChildren(printPages);
   $("printSheetSummary").textContent=
-    `${count} label${count===1?"":"s"} arranged on ${printLayoutPages.length} letter-size sheet${printLayoutPages.length===1?"":"s"} at true size.`;
+    `${count} label${count===1?"":"s"} arranged on ${layoutPages.length} letter-size sheet${layoutPages.length===1?"":"s"} at true size.`;
+  readyPrintRender={revision,isCurrent};
+  for(const id of ['printNowBtn','markSheetPrintedBtn'])if($(id))$(id).disabled=false;
+  return true;
+  }catch(error){
+    if(!isCurrent())return false;
+    if(error.code==='SESSION_CHANGED'){cancelPrintRender();return false;}
+    console.error('Could not render print sheets:',error);
+    const status=document.createElement('div');status.className='status error';status.setAttribute('role','alert');
+    status.textContent="I couldn't prepare the print sheets. Your labels are still in Ready to Print.";
+    const retry=document.createElement('button');retry.className='secondary';retry.textContent='Retry Print Sheets';
+    retry.addEventListener('click',()=>renderPrintSheets());
+    preview.replaceChildren(status,retry);
+    return false;
+  }
 }
 async function createPrintSheets(){
   if(!queue.length){
@@ -3131,37 +3178,37 @@ updateSetSummary();
 </script>
 
 <!-- LITTLE_LABELS_DIRECT_PATCHES_START -->
-<script src="./ai-client.js?v=118"></script>
-<script src="./commercial-access.js?v=118"></script>
-<script src="./translation-credit-controls.js?v=118"></script>
-<script src="./little-labels-admin.js?v=118"></script>
-<script src="./v1-audit-polish.js?v=118"></script>
-<script src="./home-grid-order.js?v=118"></script>
-<script src="./onboarding-help.js?v=118"></script>
-<script src="./label-workflow-save.js?v=118"></script>
-<script src="./make-list-isolated.js?v=118"></script>
-<script src="./make-list-polish.js?v=118"></script>
-<script src="./smart-print-layout.js?v=118"></script>
-<script src="./name-labels.js?v=118"></script>
-<script src="./name-labels-queue.js?v=118"></script>
-<script src="./queue-library-polish.js?v=118"></script>
-<script src="./library-label-editor.js?v=118"></script>
-<script src="./little-labels-theme.js?v=118"></script>
-<script src="./label-settings.js?v=118"></script>
-<script src="./language-settings.js?v=118"></script>
-<script src="./identification-language.js?v=118"></script>
-<script src="./confirmation-cleanup.js?v=118"></script>
-<script src="./type-a-label.js?v=118"></script>
-<script src="./blank-input-placeholders.js?v=118"></script>
-<script src="./sellable-label-wiring.js?v=118"></script>
-<script src="./sellable-label-render.js?v=118"></script>
-<script src="./name-only-render.js?v=118"></script>
-<script src="./true-size-rotation-fix.js?v=118"></script>
-<script src="./background-cleanup-toggle.js?v=118"></script>
-<script src="./home-settings-gear.js?v=118"></script>
-<script src="./print-blank-fix.js?v=118"></script>
-<script src="./pdf-print.js?v=118"></script>
-<script src="./pwa-version-fix.js?v=118"></script>
+<script src="./ai-client.js?v=119"></script>
+<script src="./commercial-access.js?v=119"></script>
+<script src="./translation-credit-controls.js?v=119"></script>
+<script src="./little-labels-admin.js?v=119"></script>
+<script src="./v1-audit-polish.js?v=119"></script>
+<script src="./home-grid-order.js?v=119"></script>
+<script src="./onboarding-help.js?v=119"></script>
+<script src="./label-workflow-save.js?v=119"></script>
+<script src="./make-list-isolated.js?v=119"></script>
+<script src="./make-list-polish.js?v=119"></script>
+<script src="./smart-print-layout.js?v=119"></script>
+<script src="./name-labels.js?v=119"></script>
+<script src="./name-labels-queue.js?v=119"></script>
+<script src="./queue-library-polish.js?v=119"></script>
+<script src="./library-label-editor.js?v=119"></script>
+<script src="./little-labels-theme.js?v=119"></script>
+<script src="./label-settings.js?v=119"></script>
+<script src="./language-settings.js?v=119"></script>
+<script src="./identification-language.js?v=119"></script>
+<script src="./confirmation-cleanup.js?v=119"></script>
+<script src="./type-a-label.js?v=119"></script>
+<script src="./blank-input-placeholders.js?v=119"></script>
+<script src="./sellable-label-wiring.js?v=119"></script>
+<script src="./sellable-label-render.js?v=119"></script>
+<script src="./name-only-render.js?v=119"></script>
+<script src="./true-size-rotation-fix.js?v=119"></script>
+<script src="./background-cleanup-toggle.js?v=119"></script>
+<script src="./home-settings-gear.js?v=119"></script>
+<script src="./print-blank-fix.js?v=119"></script>
+<script src="./pdf-print.js?v=119"></script>
+<script src="./pwa-version-fix.js?v=119"></script>
 <!-- LITTLE_LABELS_DIRECT_PATCHES_END -->
 </body>
 </html>
