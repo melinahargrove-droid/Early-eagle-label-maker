@@ -202,9 +202,13 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
       await f.close(); console.log('PASS late purchased response cannot unlock a different permanent account');
     }
     {
-      const f = await fixture({ user: permanent('synthetic-retry'), status: (_r, n) => n <= 2 ? { httpStatus: 503, body: { message: 'Synthetic unavailable' } } : { active: false } }); await f.ready();
+      let statusUnavailable = true;
+      const f = await fixture({ user: permanent('synthetic-retry'), status: () => statusUnavailable ? { httpStatus: 503, body: { message: 'Synthetic unavailable' } } : { active: false } }); await f.ready();
       await gate(f.page, 'llaActivatePane');
       await expect(f.page.locator('#llaStatus')).toContainText('Could not verify access');
+      // Recovery belongs to the explicit retry, not an assumed number of
+      // independent base/owner status reads during startup or focus changes.
+      statusUnavailable = false;
       await f.page.locator('#llaRetryAccess').click();
       await gate(f.page, 'llaActivatePane');
       await expect(f.page.locator('#llaStatus')).toHaveText('');
