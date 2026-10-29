@@ -69,7 +69,7 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
           if (url.pathname.endsWith('/signup')) model.session = session(anonymous('synthetic-anonymous'));
           if (url.pathname.endsWith('/verify')) model.session = { ...model.session, user: { ...permanent(model.session.user.id), email: model.pendingEmail } };
           if (url.pathname.endsWith('/user') && record.body?.email) model.pendingEmail = record.body.email;
-          if (url.pathname.endsWith('/user')) return json({ user: model.session.user });
+          if (url.pathname.endsWith('/user')) return json(request.method() === 'GET' ? model.session.user : { user: model.session.user });
           return json(model.session);
         }
         if (['/rest/v1/labels', '/rest/v1/print_queue'].includes(url.pathname)) {
