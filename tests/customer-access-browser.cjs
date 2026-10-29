@@ -3,7 +3,7 @@ const {chromium,expect}=require('@playwright/test');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const root=path.resolve(__dirname,'..'),out=process.env.CUSTOMER_ACCESS_SCREENSHOTS;
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP88OEDAwMDEwMDAwMDAwAh6gLUcoFD3wAAAABJRU5ErkJggg==','base64');
-const user=id=>({id,email:id+'@example.invalid',is_anonymous:false,identities:[{provider:'email'}]});
+const user=id=>({id,email:id+'@example.invalid',is_anonymous:false, email_confirmed_at:'2026-10-01T00:00:00Z',identities:[{provider:'email'}]});
 const session=id=>({access_token:'synthetic-'+id,refresh_token:'synthetic-refresh-'+id,user:user(id),expires_in:3600});
 (async()=>{
  const server=http.createServer((req,res)=>{try{let file=path.resolve(root,'.'+new URL(req.url,'http://localhost').pathname);if(file===root)file=path.join(root,'index.html');if(!file.startsWith(root+path.sep))return res.writeHead(403).end();res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.png')?'image/png':'text/html');res.end(fs.readFileSync(file))}catch{res.writeHead(404).end()}});

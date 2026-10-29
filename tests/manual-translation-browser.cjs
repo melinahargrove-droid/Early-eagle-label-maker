@@ -97,7 +97,7 @@ fs.mkdirSync(out, { recursive: true });
               const body = request.postDataJSON();
               account = account || (body?.refresh_token === 'synthetic-refresh-B' ? 'B' : 'A');
               return send({ access_token: 'synthetic-' + account, refresh_token: 'synthetic-refresh-' + account, expires_in: 3600,
-                user: { id: account, is_anonymous: false, email: `synthetic-${account.toLowerCase()}@example.invalid`, identities: [{}] } });
+                user: { id: account, is_anonymous: false, email_confirmed_at:'2026-10-01T00:00:00Z', email: `synthetic-${account.toLowerCase()}@example.invalid`, identities: [{}] } });
             }
             requests.push({ account, method: request.method(), path: url.pathname });
             if (!account) return send({ error: 'Synthetic sign-in required' }, 401);
@@ -240,7 +240,7 @@ fs.mkdirSync(out, { recursive: true });
         assert.equal((await counts()).execute, 3);
         await page.evaluate(async () => {
           saveCloudSession({ access_token: 'synthetic-B', refresh_token: 'synthetic-refresh-B', expires_in: 3600,
-            user: { id: 'B', is_anonymous: false, email: 'synthetic-b@example.invalid', identities: [{}] } });
+            user: { id: 'B', is_anonymous: false, email_confirmed_at:'2026-10-01T00:00:00Z', email: 'synthetic-b@example.invalid', identities: [{}] } });
           cloudReady = true; updateAccountUI(); show('home'); window.__releaseCredit(); await loadCloudData();
         });
         await page.locator('#homeTypeBtn').click();
@@ -255,7 +255,7 @@ fs.mkdirSync(out, { recursive: true });
         // Returning to A recovers the original operation without regeneration.
         await page.evaluate(async () => {
           saveCloudSession({ access_token: 'synthetic-A', refresh_token: 'synthetic-refresh-A', expires_in: 3600,
-            user: { id: 'A', is_anonymous: false, email: 'synthetic-a@example.invalid', identities: [{}] } });
+            user: { id: 'A', is_anonymous: false, email_confirmed_at:'2026-10-01T00:00:00Z', email: 'synthetic-a@example.invalid', identities: [{}] } });
           cloudReady = true; updateAccountUI(); show('home'); await loadCloudData();
         });
         await page.locator('#homeTypeBtn').click();

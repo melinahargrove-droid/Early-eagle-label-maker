@@ -105,7 +105,7 @@ function makeModel() {
       assert.equal(body.token, '000000');
       const owner = model.pendingOwner;
       assert.ok(model.users.get(owner)?.is_anonymous, 'Verification converts the same anonymous user');
-      model.users.set(owner, { id: owner, is_anonymous: false, email, identities: [{ provider: 'email' }] });
+      model.users.set(owner, { id: owner, is_anonymous: false, email_confirmed_at:'2026-10-01T00:00:00Z', email, identities: [{ provider: 'email' }] });
       model.registeredId = owner;
       return response(model.session(owner));
     }

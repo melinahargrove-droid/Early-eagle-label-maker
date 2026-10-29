@@ -8,7 +8,7 @@ const reply=(x,status=200)=>new Response(JSON.stringify(x),{status,headers:{'Con
 class Local extends ResourceLoader{fetch(url){const u=new URL(url);return u.hostname==='labels.test'&&u.pathname.endsWith('.js')?Promise.resolve(fs.readFileSync(path.join(root,u.pathname))):null}}
 async function fixture(owner=true){
  const errors=[],calls=[],prompts=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));let hook=null,account='owner-A';
- const session=id=>({access_token:'synthetic-'+id,refresh_token:'synthetic-r-'+id,expires_in:3600,user:{id,is_anonymous:false,email:id+'@example.invalid',identities:[{}]}});
+ const session=id=>({access_token:'synthetic-'+id,refresh_token:'synthetic-r-'+id,expires_in:3600,user:{id,is_anonymous:false, email_confirmed_at:'2026-10-01T00:00:00Z',email:id+'@example.invalid',identities:[{}]}});
  const dom=new JSDOM(fs.readFileSync(path.join(root,'index.html'),'utf8'),{url:'https://labels.test/',resources:new Local(),runScripts:'dangerously',pretendToBeVisual:true,virtualConsole:vc,beforeParse(w){
   w.Headers=Headers;w.Response=Response;w.AbortController=AbortController;w.TextEncoder=TextEncoder;w.scrollTo=()=>{};w.alert=()=>{};w.confirm=text=>{prompts.push(text);return true};w.localStorage.setItem('littleLabelsWelcomeSeenV1','1');w.localStorage.setItem('eea_label_maker_supabase_session_v1',JSON.stringify(session(account)));
   w.Image=class{constructor(){this.naturalWidth=this.naturalHeight=2}set src(v){queueMicrotask(()=>this.onload?.())}};

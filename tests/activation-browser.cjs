@@ -8,7 +8,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const SESSION_KEY = 'eea_label_maker_supabase_session_v1';
 const anonymous = id => ({ id, is_anonymous: true, identities: [] });
-const permanent = id => ({ id, email: `${id}@example.invalid`, is_anonymous: false, identities: [{ provider: 'email' }] });
+const permanent = id => ({ id, email: `${id}@example.invalid`, is_anonymous: false, email_confirmed_at:'2026-10-01T00:00:00Z', identities: [{ provider: 'email' }] });
 const session = user => ({ access_token: `synthetic-${user.id}-${user.is_anonymous ? 'anon' : 'permanent'}`, refresh_token: `synthetic-refresh-${user.id}`, expires_in: 3600, user });
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 

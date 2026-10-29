@@ -25,7 +25,7 @@ async function fixture(){
   const settings=w.LittleLabelSettings.get;let language='es';w.LittleLabelSettings.get=()=>({...settings(),language});
   const setLanguage=id=>{language=id;w.dispatchEvent(new w.Event('little-label-settings-changed'));};
   w.fetch=async()=>response({active:true,is_admin:true});
-  const setAccount=(id,suffix='')=>w.eval(`saveCloudSession({access_token:${JSON.stringify('synthetic-'+id+suffix)},refresh_token:'synthetic-r',user:{id:${JSON.stringify(id)},is_anonymous:false,email:'synthetic@example.invalid'}});cloudReady=false;updateAccountUI();`);
+  const setAccount=(id,suffix='')=>w.eval(`saveCloudSession({access_token:${JSON.stringify('synthetic-'+id+suffix)},refresh_token:'synthetic-r',user:{id:${JSON.stringify(id)},is_anonymous:false, email_confirmed_at:'2026-10-01T00:00:00Z',email:'synthetic@example.invalid'}});cloudReady=false;updateAccountUI();`);
   setAccount('A');await w.LittleLabelsOwnerAI.check(true);
   const requests=[];let handler=()=>Promise.resolve(response(result()));
   w.littleLabelsAIFetch=(url,options)=>{const request={url,payload:JSON.parse(options.body)};requests.push(request);return handler(request);};

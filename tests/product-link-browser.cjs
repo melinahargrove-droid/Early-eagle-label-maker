@@ -25,7 +25,7 @@ const product=(language,extra={})=>({success:true,items:[{english:'Synthetic Blo
         return fulfill(product(payload.target_language));
       }
       if(url.includes('/functions/v1/translate-label')){const payload=request.postDataJSON();requests.push(payload);return fulfill({success:true,translation:'Cubes à compter',language:payload.target_language});}
-      if(url.includes('.supabase.co/'))return fulfill(url.includes('/auth/')?{access_token:'synthetic-token',refresh_token:'synthetic-refresh',user:{id:'synthetic-owner',is_anonymous:false,email:'synthetic@example.invalid',identities:[{}]}}:url.includes('/rpc/')?{active:true,is_admin:true}:[]);
+      if(url.includes('.supabase.co/'))return fulfill(url.includes('/auth/')?{access_token:'synthetic-token',refresh_token:'synthetic-refresh',user:{id:'synthetic-owner',is_anonymous:false, email_confirmed_at:'2026-10-01T00:00:00Z',email:'synthetic@example.invalid',identities:[{}]}}:url.includes('/rpc/')?{active:true,is_admin:true}:[]);
       return route.abort();
     });
     await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.waitForFunction(()=>window.LittleLabelSettings&&cloudReady);await page.evaluate(()=>LittleLabelsAccess.check());await page.evaluate(()=>LittleLabelsOwnerAI.check(true));

@@ -15,7 +15,7 @@ const defaults = {
   sizes, language: 'es',
   sets: [{ id: 'matching', name: 'Two Matching Labels', items: [['business', 2]] }, { id: 'different', name: 'Business Card + Basket', items: [['business', 1], ['cp', 1]] }]
 };
-const user = { id: 'synthetic-settings-owner', email: 'synthetic-settings@example.invalid', is_anonymous: false, identities: [{ provider: 'email' }] };
+const user = { id: 'synthetic-settings-owner', email: 'synthetic-settings@example.invalid', is_anonymous: false, email_confirmed_at:'2026-10-01T00:00:00Z', identities: [{ provider: 'email' }] };
 const session = { access_token: 'synthetic-settings-token', refresh_token: 'synthetic-settings-refresh', expires_in: 3600, user };
 
 (async () => {

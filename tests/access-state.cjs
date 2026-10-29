@@ -8,21 +8,30 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
  w.show=id=>{for(const name of ['home','account','passwordRecovery'])$(name).classList.toggle('hidden',id!==name);w.LittleLabelsAccess?.onNavigate(id)};
  const requests=[];w.fetch=(url,options)=>new Promise(resolve=>requests.push({url,options,resolve}));
  const reply=(req,body,ok=true)=>req.resolve({ok,json:async()=>body});
- const session=(id,permanent=true)=>{w.currentUser={id,is_anonymous:!permanent,email:permanent?'synthetic@example.invalid':''};w.cloudSession={access_token:'synthetic-'+id};w.document.dispatchEvent(new w.Event('little-label-auth-updated'))};
+ const session=(id,permanent=true)=>{w.currentUser={id,is_anonymous:!permanent,email_confirmed_at:permanent?'2026-10-01T00:00:00Z':null,email:permanent?'synthetic@example.invalid':''};w.cloudSession={access_token:'synthetic-'+id};w.document.dispatchEvent(new w.Event('little-label-auth-updated'))};
  const gated=()=>!$('llAccessGate').classList.contains('lla-hidden');
  try{
  w.eval(fs.readFileSync(path.join(__dirname,'../commercial-access.js'),'utf8'));await tick();
  assert.ok(gated());assert.equal(requests.length,0);
  for(let n=0;n<3;n++){ $('llaAccount').click();assert.equal(gated(),false);$('llAccessGate').style.pointerEvents='none';w.show('home');assert.ok(gated());assert.equal($('llAccessGate').style.pointerEvents,'auto') }
  console.log('PASS immediate anonymous gate and repeated returns restore hit testing');
+ // Non-anonymous is not proof of verified email: absent and null remain blocked.
+ for(const confirmation of [undefined,null]){
+  w.currentUser={id:'unconfirmed',is_anonymous:false,email:'synthetic@example.invalid'};
+  if(confirmation!==undefined)w.currentUser.email_confirmed_at=confirmation;
+  w.cloudSession={access_token:'synthetic-unconfirmed'};
+  w.document.dispatchEvent(new w.Event('little-label-auth-updated'));await tick();
+  assert.ok(gated());assert.equal(w.LittleLabelsAccess.isActive(),false);assert.equal(requests.length,0);
+ }
+ console.log('PASS missing and null email confirmation cannot check or unlock paid access');
  session('paid');assert.ok(gated());const old=requests.shift();session('unpaid');const newer=requests.shift();reply(old,{active:true});await tick();assert.ok(gated());assert.equal(w.LittleLabelsAccess.isActive(),false);reply(newer,{active:false});await tick();assert.ok(gated());
  console.log('PASS stale purchased response cannot unlock changed identity');
  w.show('account');w.dispatchEvent(new w.Event('focus'));reply(requests.shift(),{active:false});await tick();assert.equal(gated(),false);w.show('home');assert.ok(gated());reply(requests.shift(),{active:true});await tick();assert.equal(gated(),false);assert.ok(w.LittleLabelsAccess.isActive());w.show('home');assert.equal(requests.length,0);
  console.log('PASS purchased return rechecks; protected navigation preserves verified access');
  w.show('passwordRecovery');w.dispatchEvent(new w.Event('focus'));reply(requests.shift(),{},false);await tick();assert.equal(gated(),false);w.show('home');reply(requests.shift(),{},false);await tick();assert.ok(gated());$('llaRetryAccess').click();reply(requests.shift(),{active:false});await tick();assert.ok(gated());
  console.log('PASS recovery survives refresh and errors fail closed with retry');
- $('llaCode').value='SYNTHETIC';$('llaActivate').click();const activation=requests.shift();w.dispatchEvent(new w.Event('focus'));assert.equal(requests.length,0);reply(activation,{success:true});await tick();assert.equal(gated(),false);
- console.log('PASS focus cannot discard successful activation');
+ $('llaCode').value='SYNTHETIC';$('llaActivate').click();const activation=requests.shift();w.dispatchEvent(new w.Event('focus'));assert.equal(requests.length,0);reply(activation,{success:true});await tick();assert.ok(gated());assert.equal(requests.length,1);reply(requests.shift(),{active:false});await tick();assert.ok(gated());assert.equal(w.LittleLabelsAccess.isActive(),false);$('llaRetryAccess').click();reply(requests.shift(),{active:true});await tick();assert.equal(gated(),false);
+ console.log('PASS activation success alone cannot unlock; authoritative retry confirms access');
  session('same',false);assert.ok(gated());session('same',true);assert.equal(requests.length,1);reply(requests.shift(),{active:false});await tick();assert.ok(gated());
  console.log('PASS same-ID conversion rechecks entitlement');
  }finally{w.close()}

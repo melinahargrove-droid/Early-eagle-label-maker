@@ -72,7 +72,7 @@ async function fixture({ stored = {}, fullApp = false } = {}) {
     // exercise the signed-in UI, rather than programmatically reaching behind a gate.
     const offlineFetch=w.fetch;
     w.fetch=async()=>({ok:true,json:async()=>({active:true})});
-    w.eval("saveCloudSession({access_token:'synthetic-settings-token',user:{id:'synthetic-settings',is_anonymous:false,email:'synthetic@example.invalid',identities:[{}]}});updateAccountUI();");
+    w.eval("saveCloudSession({access_token:'synthetic-settings-token',user:{id:'synthetic-settings',is_anonymous:false, email_confirmed_at:'2026-10-01T00:00:00Z',email:'synthetic@example.invalid',identities:[{}]}});updateAccountUI();");
     await w.LittleLabelsAccess.check();
     w.fetch=offlineFetch;
   }

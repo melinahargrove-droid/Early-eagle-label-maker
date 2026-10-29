@@ -3,7 +3,7 @@ const {JSDOM,ResourceLoader,VirtualConsole}=require('jsdom');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const root=path.resolve(__dirname,'..'),tick=()=>new Promise(r=>setTimeout(r,15));
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}};
-const user=id=>({id,email:id+'@example.invalid',is_anonymous:false,identities:[{provider:'email'}]});
+const user=id=>({id,email:id+'@example.invalid',is_anonymous:false, email_confirmed_at:'2026-10-01T00:00:00Z',identities:[{provider:'email'}]});
 const session=id=>({access_token:'synthetic-'+id,refresh_token:'synthetic-refresh-'+id,expires_in:3600,user:user(id)});
 const response=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
 class Local extends ResourceLoader{fetch(url){const u=new URL(url);return u.origin==='https://labels.test'&&u.pathname.endsWith('.js')?Promise.resolve(fs.readFileSync(path.join(root,u.pathname))):null}}

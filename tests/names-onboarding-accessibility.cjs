@@ -5,7 +5,7 @@ const root = path.resolve(__dirname, '..');
 const photo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP88OEDAwMDEwMDAwMDAwAh6gLUcoFD3wAAAABJRU5ErkJggg==';
 const tick = (ms=25) => new Promise(resolve => setTimeout(resolve, ms));
 const deferred = () => { let resolve; const promise = new Promise(r => resolve = r); return {promise,resolve}; };
-const session = (anonymous=false,id='synthetic-A') => ({access_token:'synthetic-'+id,refresh_token:'synthetic-refresh-'+id,expires_in:3600,user:{id,is_anonymous:anonymous,email:anonymous?undefined:'audit@example.invalid',identities:anonymous?[]:[{}]}});
+const session = (anonymous=false,id='synthetic-A') => ({access_token:'synthetic-'+id,refresh_token:'synthetic-refresh-'+id,expires_in:3600,user:{id,is_anonymous:anonymous,email_confirmed_at:anonymous?null:'2026-10-01T00:00:00Z',email:anonymous?undefined:'audit@example.invalid',identities:anonymous?[]:[{}]}});
 const response = body => new Response(JSON.stringify(body),{status:200,headers:{'Content-Type':'application/json'}});
 class Local extends ResourceLoader {
   fetch(url) { const u = new URL(url); return u.hostname==='labels.test'&&u.pathname.endsWith('.js') ? Promise.resolve(fs.readFileSync(path.join(root,u.pathname))) : null; }

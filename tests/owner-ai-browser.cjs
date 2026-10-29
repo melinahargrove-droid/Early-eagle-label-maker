@@ -15,7 +15,7 @@ const root=path.resolve(__dirname,'..'),engine=process.env.BROWSER_ENGINE||'chro
     const req=route.request(),url=new URL(req.url());if(url.origin===origin)return route.continue();
     const json=(value,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(value)});
     if(url.hostname!=='ctmqvbsjliinlddfolti.supabase.co'){blocked.push(url.href);return route.abort()}
-    if(url.pathname.includes('/auth/'))return json({access_token:'synthetic-owner',refresh_token:'synthetic-refresh',expires_in:3600,user:{id:'synthetic-owner',is_anonymous:false,email:'synthetic@example.invalid',identities:[{}]}});
+    if(url.pathname.includes('/auth/'))return json({access_token:'synthetic-owner',refresh_token:'synthetic-refresh',expires_in:3600,user:{id:'synthetic-owner',is_anonymous:false, email_confirmed_at:'2026-10-01T00:00:00Z',email:'synthetic@example.invalid',identities:[{}]}});
     if(url.pathname.endsWith('/little_labels_admin_status'))return json({is_admin:owner});
     if(url.pathname.includes('/rpc/'))return json({active:true,is_admin:owner});
     if(!url.pathname.includes('/functions/'))return json([]);
