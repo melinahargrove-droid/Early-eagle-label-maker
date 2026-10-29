@@ -274,6 +274,7 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
       await checkWidth();await f.page.screenshot({path:path.join(output,`signup-code-${width}.png`),fullPage:true});
       await f.page.locator('#accountCode').fill('000000');
       await f.page.locator('#verifyAccountCodeBtn').click();
+      await expect(f.page.locator('#accountCreateStatus')).toContainText('Email verified. Now choose a password.');
       await f.page.locator('#newAccountPassword').fill('synthetic-only-password');
       await f.page.locator('#newAccountPassword2').fill('synthetic-only-password');
       await checkWidth();await f.page.screenshot({path:path.join(output,`signup-password-${width}.png`),fullPage:true});
