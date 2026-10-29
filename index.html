@@ -804,6 +804,7 @@ async function verifyAccountEmail(){
   const context=captureCloudContext();
   const btn=$("verifyAccountCodeBtn");
   btn.disabled=true; btn.textContent="Verifying…";
+  $("accountPasswordPane").classList.add("hidden");
   try{
     const data=await authFetch("/auth/v1/verify",{
       method:"POST",
@@ -823,6 +824,17 @@ async function verifyAccountEmail(){
       }
     }
 
+    // Verify the current identity server-side before presenting setup as complete.
+    const verified = await userAuthFetch('/auth/v1/user', {method:'GET'});
+    const verifiedUser = verified?.user || verified;
+    if(!verifiedUser?.id || verifiedUser.id !== currentUser?.id ||
+       verifiedUser.is_anonymous !== false || !verifiedUser.email_confirmed_at ||
+       (verifiedUser.email || '').trim().toLowerCase() !== email.toLowerCase()){
+      throw new Error('Email verification is not complete. Use the code for this account and try again.');
+    }
+    currentUser = verifiedUser;
+    cloudReady = !!cloudSession?.access_token;
+    updateAccountUI();
     $("accountCode").value="";
     $("accountPasswordPane").classList.remove("hidden");
     setAuthStatus("accountCreateStatus","✓ Email verified. Now choose a password.","ok");
@@ -3179,7 +3191,7 @@ updateSetSummary();
 
 <!-- LITTLE_LABELS_DIRECT_PATCHES_START -->
 <script src="./ai-client.js?v=119"></script>
-<script src="./commercial-access.js?v=119"></script>
+<script src="./commercial-access.js?v=production-purchase-1"></script>
 <script src="./translation-credit-controls.js?v=119"></script>
 <script src="./little-labels-admin.js?v=119"></script>
 <script src="./v1-audit-polish.js?v=119"></script>

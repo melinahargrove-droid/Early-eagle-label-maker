@@ -2,7 +2,8 @@
   let active=false, activeIdentity='', pending=null, revision=0, wasAccountScreen=false, activatingIdentity='';
   const $=id=>document.getElementById(id);
   const permanent=()=>typeof userIsPermanent==='function'&&userIsPermanent(currentUser);
-  const identity=()=>JSON.stringify([currentUser?.id||'',cloudSession?.access_token||'',permanent()]);
+  const verified=()=>permanent()&&!!currentUser?.email_confirmed_at;
+  const identity=()=>JSON.stringify([currentUser?.id||'',cloudSession?.access_token||'',verified()]);
   const accountScreen=()=>['account','passwordRecovery'].some(id=>$(id)&&!$(id).classList.contains('hidden'));
   let gateVisible=false,returnFocus=null,lastMode=null;
   const backgroundState=new Map();
@@ -75,7 +76,7 @@
     if(typeof cloudStartupPending!=='undefined'&&cloudStartupPending){
       revision++;pending=null;render('loading');return Promise.resolve(false);
     }
-    if(!permanent()){
+    if(!verified()){
       revision++;pending=null;render('account');return Promise.resolve(false);
     }
     if(activatingIdentity===key){render('activate');return Promise.resolve(false)}
@@ -87,11 +88,11 @@
         const d=await rpc('little_labels_access_status');
         if(request!==revision||key!==identity())return false;
         active=d?.active===true;activeIdentity=key;
-        $('llaStatus').textContent='';
+        $('llaStatus').textContent=active?'':'Access is not ready for this account. Confirmation may still be arriving. Check again or sign in with your purchase email. Do not pay again.';
         render('activate');return active;
       }catch(e){
         if(request!==revision||key!==identity())return false;
-        active=false;$('llaStatus').textContent='Could not verify access. Check your connection and try again.';
+        active=false;$('llaStatus').textContent='Could not verify access. Check your connection and try again. Do not pay again.';
         render('activate');return false;
       }finally{if(pending?.request===request)pending=null}
     })();
@@ -102,7 +103,7 @@
     if(btn.disabled)return;
     const code=(input.value||'').trim();
     if(!code){status.textContent='Enter the activation code from your Little Labels purchase.';return}
-    if(!permanent()){check();return}
+    if(!verified()){check();return}
     const key=identity(),request=++revision;pending=null;activatingIdentity=key;
     btn.disabled=true;btn.textContent='Activating…';status.textContent='';
     try{
@@ -112,7 +113,11 @@
         const publicMessages=['Sign in with a permanent account first.','That activation code was not found.','That activation code is no longer active.','That activation code has already been used.'];
         const error=Error('Activation failed');error.publicMessage=publicMessages.includes(d?.error)?d.error:'That code could not be activated. Check the code in your Start Here guide and try again.';throw error;
       }
-      active=true;activeIdentity=key;status.textContent='✓ Little Labels is activated!';
+      // Legacy activation success is not authority: recheck confirmed server access.
+      const access=await rpc('little_labels_access_status');
+      if(request!==revision||key!==identity())return;
+      active=access?.active===true;activeIdentity=key;
+      status.textContent=active?'✓ Little Labels is activated!':'Access is not ready. Verify your email and check again. Do not pay again.';
       render('activate');
     }catch(e){if(request===revision&&key===identity())status.textContent=e.publicMessage||(e.status===429?'Too many attempts. Please wait a minute, then try again.':'Could not activate right now. Check your connection and try again.')}
     finally{if(activatingIdentity===key)activatingIdentity='';btn.disabled=false;btn.textContent='Activate Little Labels';if(key===identity())render('activate')}
@@ -127,7 +132,7 @@
   function openAccount(){if(typeof show==='function')show('account')}
   function install(){
     const o=document.createElement('div');o.id='llAccessGate';
-    o.innerHTML=`<div class="lla-wrap"><div class="lla-card"><div class="lla-heart">♡</div><div id="llaCheckingPane" class="lla-hidden"><h1 id="llaCheckingTitle">Checking access…</h1><p id="llaCheckingNote">Please wait while we check this account’s Little Labels purchase.</p></div><div id="llaActivatePane"><div class="lla-kicker">One-Time Setup</div><h1 id="llaActivateTitle">Activate Little Labels</h1><p>Your purchase includes access for one Little Labels account. Enter the activation code from your Start Here guide.</p><label for="llaCode">Activation code</label><input id="llaCode" aria-describedby="llaStatus" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX"><button id="llaActivate">Activate Little Labels</button><div id="llaStatus" class="lla-status" role="status" aria-live="polite"></div><div class="lla-note">Once activated, just sign into this same account on your phone, tablet, or computer. You won't need to enter the code again.</div></div><div id="llaAccountPane" class="lla-hidden"><div class="lla-kicker">Almost There</div><h1 id="llaAccountTitle">Sign in to activate</h1><p>Little Labels access belongs to your account, so first create or sign into the account you'll use on your devices.</p><button id="llaAccount">Create or Sign In</button><div class="lla-note">After you're signed in, you'll come right back here to enter your purchase activation code.</div></div><details class="lla-help"><summary>Activation help</summary><p>1. Create or sign into the Little Labels account you want to use.</p><p>2. Find your activation code in the <strong>Start Here guide</strong> included with your purchase.</p><p>3. Enter the code once, then use the same account on your phone, tablet, or computer.</p><p>If the code has already been used, sign into the account you activated. Check your purchase materials if you need help finding the code.</p></details><button id="llaRetryAccess" class="lla-hidden">Check access again</button><button id="llaManageAccount" class="lla-hidden">Sign in with another account</button></div></div>`;
+    o.innerHTML=`<div class="lla-wrap"><div class="lla-card"><div class="lla-heart">♡</div><div id="llaCheckingPane" class="lla-hidden"><h1 id="llaCheckingTitle">Checking access…</h1><p id="llaCheckingNote">Please wait while we check this account’s Little Labels purchase.</p></div><div id="llaActivatePane"><div class="lla-kicker">One-Time Setup</div><h1 id="llaActivateTitle">Activate Little Labels</h1><p>Bought through Stripe? Access activates automatically after payment succeeds. Sign in or create an account using the same email you used at checkout and complete email verification. No activation code is needed.</p><p>Payment still processing? Wait for confirmation, then choose <strong>Check access again</strong>. Do not purchase again to unlock access.</p><label for="llaCode">Legacy activation code (optional)</label><input id="llaCode" aria-describedby="llaStatus" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX"><button id="llaActivate">Activate Little Labels</button><div id="llaStatus" class="lla-status" role="status" aria-live="polite"></div><div class="lla-note">Only enter a code if your original purchase included one in a Start Here guide. Once you have access, use the same account on every device.</div></div><div id="llaAccountPane" class="lla-hidden"><div class="lla-kicker">Almost There</div><h1 id="llaAccountTitle">Sign in to access Little Labels</h1><p>For Stripe purchases, create or sign into an account with the same email you used at checkout. Complete email verification to claim your purchase.</p><button id="llaAccount">Create or Sign In</button><div class="lla-note">Access is checked automatically after sign-in. Stripe purchases do not need an activation code.</div></div><details class="lla-help"><summary>Purchase and activation help</summary><p>For Stripe purchases, use the checkout email for your verified Little Labels account. If you bought before creating an account, create it with that email now.</p><p>If you closed checkout, reopen Little Labels and sign in. You do not need the checkout page or a code. If payment is still processing, wait for confirmation and choose <strong>Check access again</strong>.</p><p>If access is missing after a confirmed payment, check that you are in the correct account. Keep your receipt for support; do not pay again. A canceled or failed payment does not unlock access.</p><p>For older purchases that included an activation code, enter the code from your <strong>Start Here guide</strong> once. Use the same account on every device. If it has already been used, sign into the account you activated.</p></details><button id="llaRetryAccess" class="lla-hidden">Check access again</button><button id="llaManageAccount" class="lla-hidden">Sign in with another account</button></div></div>`;
     o.setAttribute('role','dialog');o.setAttribute('aria-modal','true');o.setAttribute('tabindex','-1');
     document.body.append(o);
     document.addEventListener('keydown',e=>{
