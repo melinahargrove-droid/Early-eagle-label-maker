@@ -211,7 +211,8 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
       statusUnavailable = false;
       await f.page.locator('#llaRetryAccess').click();
       await gate(f.page, 'llaActivatePane');
-      await expect(f.page.locator('#llaStatus')).toHaveText('');
+      await expect(f.page.locator('#llaStatus')).toContainText('Access is not ready for this account.');
+      await expect(f.page.locator('#llaStatus')).toContainText('Do not pay again.');
       assert.ok(f.model.statusCalls.length >= 2);
       await f.close(); console.log('PASS failed entitlement stays gated and explicit Check access again retries successfully');
     }
