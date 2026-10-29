@@ -834,7 +834,8 @@ async function verifyAccountEmail(){
     }
     currentUser = verifiedUser;
     cloudReady = !!cloudSession?.access_token;
-    updateAccountUI();
+    // Keep password setup visible until Finish Account Setup updates the account panes.
+    document.dispatchEvent(new CustomEvent('little-label-auth-updated'));
     $("accountCode").value="";
     $("accountPasswordPane").classList.remove("hidden");
     setAuthStatus("accountCreateStatus","✓ Email verified. Now choose a password.","ok");

@@ -205,6 +205,7 @@ async function fixture(model, stored = null) {
     }
     input('accountCode', '000000'); click('verifyAccountCodeBtn');
     await until(() => !$('accountPasswordPane').classList.contains('hidden'), 'successful verification');
+    assert.equal($('accountPasswordPane').closest('.hidden'), null, 'Verified signup password setup has no hidden ancestor');
     assert.equal(w.eval('currentUser.id'), initialId); assert.equal($('accountCode').value, '');
     console.log('PASS signup uses same-ID conversion; wrong and expired verification codes retain a safe retry and never unlock access');
 
